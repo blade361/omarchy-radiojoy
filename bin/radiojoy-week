@@ -137,12 +137,21 @@ def fetch_bluesky(handle, week):
                    "link": f"https://bsky.app/profile/{handle}/post/{p['uri'].rsplit('/', 1)[-1]}"}
 
 
+def is_reblog(p, body, blog):
+    """A Tumblr post that isn't the blog's own: the API's reblog fields, or the
+    reblog markup in the body."""
+    for k in ("reblogged-from-name", "reblogged-root-name"):
+        if p.get(k) and p[k] != blog:
+            return True
+    return "tumblr_blog" in body
+
+
 def fetch_tumblr(blog, week):
     raw = get(f"https://{blog}.tumblr.com/api/read/json?num=40")
     data = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
     for p in data.get("posts", []):
         body = p.get("regular-body", "") + p.get("photo-caption", "")
-        if "tumblr_blog" in body:  # a reblog
+        if is_reblog(p, body, blog):
             continue
         tags = " ".join(t.lower() for t in p.get("tags", []))
         if "radiojoy week" not in tags and "radiojoyweek" not in tags:
@@ -459,7 +468,7 @@ def announcements():
                 raw = get(f"https://{account}.tumblr.com/api/read/json?num=50")
                 for p in json.loads(raw[raw.index("{"):raw.rindex("}") + 1]).get("posts", []):
                     body = p.get("regular-body", "") + p.get("photo-caption", "")
-                    if "tumblr_blog" in body:  # a reblog
+                    if is_reblog(p, body, account):
                         continue
                     text = html.unescape(re.sub(r"<[^>]+>", " ", body)) + " " + " ".join(p.get("tags", []))
                     imgs = [re.search(r'src="([^"]+)"', t)[1] for t in re.findall(r"<img[^>]+>", body)]
@@ -527,12 +536,16 @@ def discover():
             found[hit[0]] = (prompts, link, trusted)
 
     for start, (prompts, link, trusted) in sorted(found.items()):
-        key = f"{start}" if prompts else f"{start}?"  # prompts may come later
+        # remembered per trust level, and announced-without-prompts separately, so a
+        # DeviantArt suggestion never hides a listed artist's post and prompts
+        # posted later are still picked up
+        key = f"{start}" + ("" if trusted else "~") + ("" if prompts else "?")
         if key in seen:
             continue
         seen.add(key)
         end = start + dt.timedelta(days=max(len(prompts), 7) - 1)
         if trusted and prompts:
+            suggestions.pop(str(start), None)  # confirmed by a listed artist
             add_week(start, prompts, f"found {today} by radiojoy-week --discover ({link}); check the prompts")
             notify(f"\uf005 Radiojoy Week {start.year} is coming!",
                    f"{start:%B %-d}–{end:%-d}. The prompts were read from the announcement, please check "

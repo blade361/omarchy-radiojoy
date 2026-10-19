@@ -6,7 +6,7 @@
 # Written in bash on purpose: fastfetch finds the terminal by walking up past shells,
 # and with only shells between it and systemd it falls back to $TERM.
 bin=$(dirname "$(readlink -f "$0")")
-dir=${XDG_RUNTIME_DIR:-/tmp}/radiojoy-splash
+dir=${XDG_RUNTIME_DIR:-$HOME/.cache}/radiojoy-splash
 [[ -d $dir ]] || exit 0
 # the redraw has to put the prompt back, which needs starship (Omarchy's default prompt)
 command -v starship >/dev/null || exit 0

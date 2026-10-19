@@ -6,7 +6,7 @@ if [[ $- == *i* && -t 1 && -f ~/.local/state/omarchy/current/theme/radiojoy ]]; 
   ~/.local/bin/radiojoy-splash
 fi
 __radiojoy_used() {
-  (( ++__radiojoy_prompts == 2 )) && rm -f "${XDG_RUNTIME_DIR:-/tmp}/radiojoy-splash/$(basename "$(tty)")"
+  (( ++__radiojoy_prompts == 2 )) && rm -f "${XDG_RUNTIME_DIR:-$HOME/.cache}/radiojoy-splash/$(basename "$(tty)")"
 }
 PROMPT_COMMAND+=(__radiojoy_used)
 # <<< omarchy-radiojoy <<<

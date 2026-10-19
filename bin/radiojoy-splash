@@ -51,15 +51,16 @@ quote() {
 # changes, until the shell's second prompt (see the .bashrc block) marks it as used.
 # $1 = lines from the art's top row down to the cursor; $2 = the cursor row when known.
 remember() {
-  local row=$2 _ dir=${XDG_RUNTIME_DIR:-/tmp}/radiojoy-splash
+  local row=$2 _ dir=${XDG_RUNTIME_DIR:-$HOME/.cache}/radiojoy-splash
   [[ $row ]] || IFS='[;' read -rs -d R -t 0.5 -p $'\e[6n' _ row _ </dev/tty || return
   (( row > lines )) && row=$lines
   # starship's add_newline puts one more line before the prompt; it scrolls if at the bottom
   (( row + 1 > lines )) && (( row -= row + 1 - lines ))
   (( row - $1 >= 1 )) || return
-  mkdir -p "$dir"
+  # private to this user, and never through a planted symlink
+  mkdir -p -m 700 "$dir" && [[ -d $dir && ! -L $dir && -O $dir ]] || return
   printf 'pid=%s\ntty=%s\nterm=%s\nsize=%s\nart=%s\n' \
-    "${RADIOJOY_PID:-$PPID}" "$term_name" "$TERM" "$lines $cols" "$art" >"$dir/${term_name##*/}"
+    "${RADIOJOY_PID:-$PPID}" "$term_name" "$TERM" "$lines $cols" "$art" >"$dir/.${term_name##*/}.$$" && mv -f "$dir/.${term_name##*/}.$$" "$dir/${term_name##*/}"
 }
 
 # The splash follows the wallpaper: NN-alastor.* / NN-emily.* use that character's

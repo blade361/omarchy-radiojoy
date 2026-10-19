@@ -1,0 +1,38 @@
+# Radiojoy — Alastor x Emily (Hazbin Hotel).
+# Colors sampled from the official character renders on hazbinhotel.fandom.com:
+# Alastor's crimson coat, maroon shirt and gold grin; Emily's lavender robe,
+# periwinkle trim and pale-blue halo.
+mode = "dark"
+
+accent = "#dc2249"
+selection = "#4a1726"
+muted = "#8885b2"
+
+background = "#170a0f"
+dark_background = "#10060a"
+darker_background = "#0a0406"
+lighter_background = "#2b1a1d"
+
+foreground = "#ece9f7"
+dark_foreground = "#9d99bc"
+light_foreground = "#d9d5ed"
+bright_foreground = "#f5f6fd"
+
+red = "#dc2249"
+yellow = "#f2c14e"
+orange = "#de5c58"
+green = "#9ccfb0"
+cyan = "#a6d8ec"
+blue = "#7d82bc"
+magenta = "#e0789f"
+brown = "#6f0c14"
+
+bright_red = "#ff5c7a"
+bright_yellow = "#ffe08a"
+bright_green = "#c8ecd6"
+bright_cyan = "#d5edf8"
+bright_blue = "#b4b8f0"
+bright_magenta = "#f3b6cf"
+
+hyprland_active_border = "rgba(dc2249ee) rgba(f2c14eee) rgba(7d82bcee) 45deg"
+hyprland_inactive_border = "rgba(2b1a1daa)"

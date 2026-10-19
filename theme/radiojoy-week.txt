@@ -1,0 +1,8 @@
+# Radiojoy Week prompts (bar button shows today's). Format: YYYY-MM-DD<tab>prompt
+2026-10-18	Day 1: Redeemed Alastor / Fallen Emily
+2026-10-19	Day 2: Dove / Shadow
+2026-10-20	Day 3: Prayer / Devotion
+2026-10-21	Day 4: War / Healing
+2026-10-22	Day 5: Worlds Apart / My Heaven
+2026-10-23	Day 6: Flight / Grounded
+2026-10-24	Day 7: Wedding Day / Forever and Always

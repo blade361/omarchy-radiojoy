@@ -1,0 +1,55 @@
+#!/bin/bash
+# Recolours terminals to the wallpaper's palette (theme shell/foot-<who>.ini) with
+# OSC escape sequences, which foot, kitty, ghostty and alacritty all understand.
+#   radiojoy-term-colors          this terminal (run from the .bashrc block)
+#   radiojoy-term-colors --idle   every terminal of yours that sits idle at a shell
+#                                 prompt (radiojoy-sync); busy ones are left alone
+# On other themes it resets those terminals to their configured colours.
+t=$HOME/.local/state/omarchy/current/theme
+
+sequence() {
+  local who ini k v i
+  if [[ ! -f $t/radiojoy ]]; then
+    printf '\e]104\a\e]110\a\e]111\a\e]112\a\e]117\a\e]119\a'
+    return
+  fi
+  case $(readlink -f "$HOME/.local/state/omarchy/current/background") in
+    *-alastor.*) who=alastor ;;
+    *-emily.*) who=emily ;;
+    *) who=radiojoy ;;
+  esac
+  ini=$t/shell/foot-$who.ini
+  [[ -f $ini ]] || return 1
+  while IFS='=' read -r k v; do
+    case $k in
+      foreground) printf '\e]10;#%s\a' "$v" ;;
+      background) printf '\e]11;#%s\a' "$v" ;;
+      selection-foreground) printf '\e]19;#%s\a' "$v" ;;
+      selection-background) printf '\e]17;#%s\a' "$v" ;;
+      cursor) printf '\e]12;#%s\a' "${v#* }" ;;
+      regular[0-7]) printf '\e]4;%d;#%s\a' "${k#regular}" "$v" ;;
+      bright[0-7]) i=${k#bright}; printf '\e]4;%d;#%s\a' "$((i + 8))" "$v" ;;
+    esac
+  done <"$ini"
+}
+
+if [[ $1 != --idle ]]; then
+  [[ -t 1 ]] && sequence
+  exit 0
+fi
+
+seq=$(sequence) || exit 0
+# A shell is idle when it is the foreground process group of its own terminal.
+for proc in /proc/[0-9]*; do
+  [[ -O $proc ]] || continue
+  comm=$(<"$proc/comm") 2>/dev/null || continue
+  case $comm in bash | zsh | fish) ;; *) continue ;; esac
+  tty=$(readlink "$proc/fd/0" 2>/dev/null)
+  [[ $tty == /dev/pts/* && -O $tty ]] || continue
+  read -r -a stat <"$proc/stat" 2>/dev/null || continue
+  # fields after the "(comm)" one: pgrp is the 5th, tpgid the 8th overall
+  pgrp=${stat[4]} tpgid=${stat[7]}
+  [[ ${stat[0]} == "$pgrp" && $tpgid == "$pgrp" ]] || continue
+  printf '%s' "$seq" >"$tty" 2>/dev/null
+done
+exit 0

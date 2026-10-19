@@ -3,6 +3,7 @@
 # be redrawn when the wallpaper changes until this terminal is used: the second
 # prompt means Enter was pressed.
 if [[ $- == *i* && -t 1 && -f ~/.local/state/omarchy/current/theme/radiojoy ]]; then
+  ~/.local/bin/radiojoy-term-colors
   ~/.local/bin/radiojoy-splash
 fi
 __radiojoy_used() {

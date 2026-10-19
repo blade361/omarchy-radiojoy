@@ -32,6 +32,14 @@ elif [[ -f $branding/.radiojoy ]]; then
   rm -f "$branding/.radiojoy"
 fi
 
+# Bar, menus, notifications and popups: the shell recolours live from a colours
+# payload (what omarchy theme set sends it), here the character's palette.
+if [[ $active && -f $t/shell/colors-${who:-radiojoy}.toml ]] && command -v omarchy-shell >/dev/null; then
+  timeout 2 omarchy-shell shell applyTheme \
+    "$(base64 -w0 "$t/shell/colors-${who:-radiojoy}.toml")" \
+    "$(base64 -w0 "$t/shell/shell-${who:-radiojoy}.toml")" >/dev/null 2>&1
+fi
+
 # Window border: the theme's hyprland.lua reads radiojoy-border on every reload;
 # apply it live too.
 if [[ $active ]]; then
@@ -57,6 +65,44 @@ if command -v spicetify >/dev/null; then
     printf '{"who":"%s","colors":{%s}}\n' "$who" "$pairs" >"$xpui/radiojoy-colors.json.tmp" &&
       mv "$xpui/radiojoy-colors.json.tmp" "$xpui/radiojoy-colors.json"
   fi
+fi
+
+# Zen / Firefox: profiles whose userChrome.css imports radiojoy-zen.css get the
+# wallpaper's colours (read when the browser starts). Opt-in, see the README.
+for css in "$HOME"/.config/zen/*/chrome/userChrome.css "$HOME"/.zen/*/chrome/userChrome.css "$HOME"/.mozilla/firefox/*/chrome/userChrome.css; do
+  grep -qs 'radiojoy-zen.css' "$css" || continue
+  out=${css%/*}/radiojoy-zen.css
+  ini=$t/shell/colors-${who:-radiojoy}.toml
+  if [[ $active && -f $ini ]]; then
+    c() { sed -nE "s/^$1[[:space:]]*=[[:space:]]*\"(#[0-9a-fA-F]{6})\".*/\1/p" "$ini"; }
+    cat >"$out" <<CSS
+/* written by radiojoy-sync for the current wallpaper */
+:root {
+  --zen-primary-color: $(c accent) !important;
+  --zen-colors-primary: $(c lighter_background) !important;
+  --zen-colors-secondary: $(c selection) !important;
+  --zen-colors-tertiary: $(c dark_background) !important;
+  --zen-colors-border: $(c accent) !important;
+  --zen-main-browser-background: $(c background) !important;
+  --zen-main-browser-background-toolbar: $(c background) !important;
+  --toolbar-bgcolor: $(c background) !important;
+  --toolbar-color: $(c foreground) !important;
+  --toolbox-textcolor: $(c foreground) !important;
+  --tab-selected-bgcolor: $(c lighter_background) !important;
+}
+CSS
+  else
+    : >"$out"
+  fi
+done
+
+# Terminal colours: idle terminals switch palette now, new ones in the .bashrc block.
+if [[ $active ]]; then
+  "$(dirname "$(readlink -f "$0")")/radiojoy-term-colors" --idle
+  touch "$s/radiojoy-term-colors"
+elif [[ -f $s/radiojoy-term-colors ]]; then
+  "$(dirname "$(readlink -f "$0")")/radiojoy-term-colors" --idle   # resets them
+  rm -f "$s/radiojoy-term-colors"
 fi
 
 # Terminals still at their first prompt redraw their splash.

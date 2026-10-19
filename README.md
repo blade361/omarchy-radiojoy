@@ -17,11 +17,17 @@ Radiojoy one gives you both.
 | **Screensaver** | his silhouettes | hers | both |
 | **Bar button** | 📻 radio + devil | feather + sparkles | radio + heart + feather |
 | **Spotify** (Spicetify) | maroon & gold | twilight periwinkle | theme colours |
+| **Bar, menus, notifications** | maroon | twilight navy | theme colours |
+| **Terminal colours** | crimson on maroon | lavender on twilight | theme colours |
+| **Zen / Firefox** (opt-in) | maroon & crimson | twilight & halo blue | theme colours |
 
-- **31 official wallpapers** in a repeating Alastor → Emily → Radiojoy order (15 Alastor,
-  15 Emily, plus a picture of the pair). The radio button on the bar goes to the next one.
+- **47 official wallpapers** in a repeating Alastor → Emily → Radiojoy order (23 Alastor,
+  23 Emily, plus a picture of the pair). The radio button on the bar goes to the next one.
+- **Radiojoy Week:** during the week in `radiojoy-week.txt` (2026: Oct 18–24) the bar
+  button wears a ★ and shows the day's prompt, and the terminal shows it too; the rest
+  of the year it counts down. While Spotify plays, the button goes **on air**.
 - **Terminal splash:** the art is drawn as a real image beside fastfetch and "tunes in"
-  through radio static. Terminals you haven't typed in yet redraw when the wallpaper changes.
+  through radio static, with a quote and a little status line under it. Terminals you haven't typed in yet redraw when the wallpaper changes.
 - **Lock screen:** every time you lock, the background steps to the next wallpaper in the order.
 - A radio "tuning in" sound at login.
 
@@ -64,6 +70,17 @@ Only with [Spicetify](https://spicetify.app). The installer adds the `radiojoy-f
 extension and runs `spicetify apply` once (Spotify restarts). After that, colours change
 live without restarting.
 
+### Zen / Firefox
+
+Add this as the first line of your profile's `chrome/userChrome.css` (and enable
+`toolkit.legacyUserProfileCustomizations.stylesheets` in `about:config`):
+
+```css
+@import url("radiojoy-zen.css");
+```
+
+The colours update with the wallpaper and apply the next time the browser starts.
+
 ## Uninstall
 
 ```bash
@@ -85,7 +102,14 @@ them into the order.
   [Your concern is wasted on this Little Dove](https://www.deviantart.com/dragonfoxgirl/art/Your-concern-is-wasted-on-this-Little-Dove-1341538897),
   [Annoying little angel on my shoulder](https://www.deviantart.com/dragonfoxgirl/art/Annoying-little-angel-on-my-shoulder-1277248105),
   [Al Al Al!](https://www.deviantart.com/dragonfoxgirl/art/Al-Al-Al%21-1233950345)
-- termsandfeathers: [cherry blossoms](https://www.tumblr.com/termsandfeathers/814820394436640768),
+- RadioJoy Enjoyer ([Bluesky](https://bsky.app/profile/radiojoyenjoyer.bsky.social), X @RadioJoyEnjoyer):
+  Radiojoy Week 2026 [Day 1 "Fallen Emily"](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3my6zctsua227),
+  [Day 2 "Dove/Shadow"](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3myayejcjqs2e),
+  [Doodling!](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3mxxnxxevzk2x),
+  [My parents](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3msyqfqud2227).
+  Please don't repost their art; they ask people not to.
+- termsandfeathers: Radiojoy Week 2026 [Day 1](https://www.tumblr.com/termsandfeathers/830853127253196800)
+  and [Day 2](https://www.tumblr.com/termsandfeathers/830907476634451968) sketches, [cherry blossoms](https://www.tumblr.com/termsandfeathers/814820394436640768),
   [50 followers Q+A](https://www.tumblr.com/termsandfeathers/816085258794614784),
   ["This is dangerous"](https://www.tumblr.com/termsandfeathers/812903677665968128)
 - Pikagalaxy30: [Alastor x Emily](https://www.deviantart.com/pikagalaxy30/art/Alastor-x-Emily-%28Hazbin-Hotel%2C-Radiojoy%29-1267936052)

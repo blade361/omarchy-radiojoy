@@ -41,10 +41,36 @@ play() {
   printf '\e8%s\e[?25h' "${frames[0]}"
 }
 
-# A random line from the matching quotes file (Emily's in her periwinkle).
+# Under the info: a random line from the matching quotes file (Emily's in her
+# periwinkle), a little status line, and Radiojoy Week (today's prompt or a
+# countdown to the next one in radiojoy-week.txt). Sets qlines to the lines printed.
 quote() {
-  [[ -s $quotes ]] &&
-    printf '\n%*s\e[3;38;2;%sm%s\e[0m\n' "$pad_left" "" "$([[ $who == -emily ]] && echo 180\;184\;240 || echo 220\;34\;73)" "$(shuf -n1 "$quotes")"
+  local color status today next days
+  color=$([[ $who == -emily ]] && echo '180;184;240' || echo '220;34;73')
+  case $who in
+    -alastor) status="📻  Station: 666 AM  ·  On air since 1933" ;;
+    -emily) status="😇  Halo: polished  ·  Wings: 6  ·  Joy: 100%" ;;
+    *) status="📻😇  Now playing: Radiojoy on 666 AM" ;;
+  esac
+  printf '\n'
+  qlines=1
+  if [[ -s $quotes ]]; then
+    printf '%*s\e[3;38;2;%sm%s\e[0m\n' "$pad_left" "" "$color" "$(shuf -n1 "$quotes")"
+    (( qlines++ ))
+  fi
+  printf '%*s\e[38;2;157;153;188m%s\e[0m\n' "$pad_left" "" "$status"
+  (( qlines++ ))
+  if [[ -f $theme/radiojoy-week.txt ]]; then
+    today=$(date +%F)
+    if next=$(grep -s "^$today"$'\t' "$theme/radiojoy-week.txt" | cut -f2-) && [[ $next ]]; then
+      printf '%*s\e[1;38;2;242;193;78m\uf4ce  Radiojoy Week · %s\e[0m\n' "$pad_left" "" "$next"
+      (( qlines++ ))
+    elif next=$(grep -sE '^[0-9]{4}-' "$theme/radiojoy-week.txt" | cut -f1 | sort | awk -v d="$today" '$1 > d' | head -1) && [[ $next ]]; then
+      days=$(( ($(date -d "$next" +%s) - $(date -d "$today" +%s)) / 86400 ))
+      printf '%*s\e[38;2;242;193;78m\uf4ce  Radiojoy Week in %d day%s\e[0m\n' "$pad_left" "" "$days" "$([[ $days == 1 ]] || echo s)"
+      (( qlines++ ))
+    fi
+  fi
 }
 
 # Remembers this terminal so radiojoy-splash-refresh can redraw it when the wallpaper
@@ -87,7 +113,7 @@ info_cols=$(( $(printf '%s\n' "$info" | sed 's/\x1b\[[0-9;]*m//g' | wc -L) + 2 )
 if [[ -f $art && -t 1 && ( -t 0 || -n $into ) ]]; then
   # art beside the info, as tall as the window allows (room left for the quote and
   # prompt) and only as narrow as needed so all the info fits on its right
-  side_rows=$(( lines - 6 ))
+  side_rows=$(( lines - 8 ))
   if read -r w0 _ < <("$bin/radiojoy-sixel" "$art" 20 --probe --tty "$term" 2>/dev/null); then
     fit=$(( (cols - pad_left - info_cols - 1) * 20 / w0 ))
     (( fit < side_rows )) && side_rows=$fit
@@ -97,7 +123,7 @@ if [[ -f $art && -t 1 && ( -t 0 || -n $into ) ]]; then
     (( w + pad_left + info_cols <= cols )); then
     mode=side rows=$side_rows
   else
-    top_rows=$(( lines - $(printf '%s\n' "$info" | wc -l) - 4 ))  # 2 more for the quote
+    top_rows=$(( lines - $(printf '%s\n' "$info" | wc -l) - 6 ))  # room for the lines under it
     (( top_rows > 20 )) && top_rows=20
     if (( top_rows >= 6 )) && read -r w _ < <("$bin/radiojoy-sixel" "$art" "$top_rows" --probe --tty "$term" 2>/dev/null) &&
       (( w + pad_left <= cols )); then
@@ -121,7 +147,7 @@ if [[ $mode == top ]]; then
   printf '%s\n' "$info"
   quote
   n_info=$(printf '%s\n' "$info" | wc -l)
-  remember $(( h + n_info + 2 )) ${into:+$(( h + n_info + 3 ))}
+  remember $(( h + n_info + qlines )) ${into:+$(( h + n_info + qlines + 1 ))}
   exit 0
 fi
 
@@ -158,4 +184,4 @@ printf '\e[%dA\e[%dG\e7' "$((n - pad_top))" "$((pad_left + 1))"
 play
 printf '\e8\e[%dB\r' "$((n - pad_top))"
 quote
-[[ $mode == side ]] && remember $(( n - pad_top + 2 )) ${into:+$(( n + 3 ))}
+[[ $mode == side ]] && remember $(( n - pad_top + qlines )) ${into:+$(( n + qlines + 1 ))}

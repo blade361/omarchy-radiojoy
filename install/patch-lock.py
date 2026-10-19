@@ -107,7 +107,7 @@ VIEW_BLOCK = '''    // Radiojoy (omarchy-radiojoy): full-body art at the sides w
         textFormat: Text.PlainText
         text: lockStage.artMode === "alastor-" ? "~ stay tuned ~"
           : lockStage.artMode === "emily-" ? "~ have a heavenly day ~" : "~ stay tuned, my angel ~"
-        color: lockStage.artMode === "emily-" ? "#b4b8f0" : Commons.Color.lock.selection
+        color: lockStage.artMode === "emily-" ? "#c8ccff" : "#ff6f8a"
         font.family: Style.font.family
         font.italic: true
         font.pixelSize: Math.round(root.height * 0.022)

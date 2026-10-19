@@ -5,7 +5,7 @@
 # days crossed out. Whenever the collage changes (a new day or new art) it becomes
 # the wallpaper. After the week it's removed and the normal wallpapers return.
 # Run hourly by radiojoy-week.timer.
-import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.request
+import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.parse, urllib.request
 from pathlib import Path
 
 HOME = Path.home()
@@ -45,9 +45,26 @@ def week_days(today):
     return []
 
 
+# Only these hosts, over https: feeds and images come from posts, which could
+# otherwise point at file:// paths or machines on the local network.
+ALLOWED_HOSTS = ("public.api.bsky.app", "cdn.bsky.app", "tumblr.com")
+MAX_BYTES = 25 * 1024 * 1024
+
+
 def get(url, binary=False):
+    u = urllib.parse.urlsplit(url)
+    host = (u.hostname or "").lower()
+    if u.scheme != "https" or not any(host == h or host.endswith("." + h) for h in ALLOWED_HOSTS):
+        raise ValueError(f"refusing {url!r}")
     with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20) as r:
-        data = r.read()
+        # redirects must stay on the allowed hosts too
+        final = urllib.parse.urlsplit(r.geturl())
+        fhost = (final.hostname or "").lower()
+        if final.scheme != "https" or not any(fhost == h or fhost.endswith("." + h) for h in ALLOWED_HOSTS):
+            raise ValueError(f"redirected off the allowed hosts: {r.geturl()!r}")
+        data = r.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        raise ValueError(f"too large: {url!r}")
     return data if binary else data.decode("utf-8", "replace")
 
 
@@ -144,6 +161,9 @@ def collect(week):
                 data = get(art["url"], binary=True)
             except Exception as e:
                 log(f"{key}: {e!r}")
+                continue
+            if not data.startswith((b"\xff\xd8", b"\x89PNG", b"GIF8", b"RIFF")):  # jpeg/png/gif/webp
+                log(f"{key}: not an image")
                 continue
             path = year_dir / (hashlib.sha1(key.encode()).hexdigest()[:12] + ".img")
             path.write_bytes(data)

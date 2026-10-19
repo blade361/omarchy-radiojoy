@@ -1,0 +1,7 @@
+[Unit]
+Description=Radiojoy Week: collage wallpaper of the week's art
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/radiojoy-week

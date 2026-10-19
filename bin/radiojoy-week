@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+# Radiojoy Week wallpaper: during the week listed in the theme's radiojoy-week.txt,
+# builds a collage of only that week's art (fetched from the artists in
+# radiojoy-week-artists.txt as they post it) with the prompt list beside it, past
+# days crossed out. Whenever the collage changes (a new day or new art) it becomes
+# the wallpaper. After the week it's removed and the normal wallpapers return.
+# Run hourly by radiojoy-week.timer.
+import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.request
+from pathlib import Path
+
+HOME = Path.home()
+THEME = HOME / ".local/state/omarchy/current/theme"
+OUT_DIR = HOME / ".config/omarchy/backgrounds/radiojoy"
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "radiojoy-week"
+BG_LINK = HOME / ".local/state/omarchy/current/background"
+UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) omarchy-radiojoy"}
+FONTS = Path("/usr/share/fonts/noto")
+
+
+def log(*a):
+    print(*a, file=sys.stderr)
+
+
+def week_days(today):
+    """[(date, prompt)] for the week containing today, or []."""
+    f = THEME / "radiojoy-week.txt"
+    rows = []
+    for line in f.read_text().splitlines() if f.exists() else []:
+        m = re.match(r"(\d{4}-\d{2}-\d{2})\t(.+)", line)
+        if m:
+            rows.append((dt.date.fromisoformat(m[1]), m[2].strip()))
+    rows.sort()
+    # consecutive runs of dates are one week
+    weeks, cur = [], []
+    for d, p in rows:
+        if cur and (d - cur[-1][0]).days != 1:
+            weeks.append(cur)
+            cur = []
+        cur.append((d, p))
+    if cur:
+        weeks.append(cur)
+    for w in weeks:
+        if w[0][0] <= today <= w[-1][0]:
+            return w
+    return []
+
+
+def get(url, binary=False):
+    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20) as r:
+        data = r.read()
+    return data if binary else data.decode("utf-8", "replace")
+
+
+def event_date(utc):
+    """A post's date in US time (UTC-6), where these events are run; a post made the
+    evening of Day 1 there is already Day 2 in Europe."""
+    return (utc - dt.timedelta(hours=6)).date()
+
+
+def day_of(text, posted, week):
+    m = re.search(r"\bday\s*([1-9])\b", text, re.I)
+    if m and int(m[1]) <= len(week):
+        return int(m[1])
+    for i, (d, _) in enumerate(week, 1):
+        if d == posted:
+            return i
+    return None
+
+
+def fetch_bluesky(handle, week):
+    feed = json.loads(get("https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed"
+                          f"?actor={handle}&limit=60&filter=posts_with_media"))
+    for item in feed.get("feed", []):
+        if item.get("reason"):  # a repost
+            continue
+        p = item["post"]
+        if p["author"]["handle"] != handle:
+            continue
+        text = p["record"].get("text", "")
+        if "radiojoyweek" not in re.sub(r"[\s#_]", "", text.lower()):
+            continue
+        posted = event_date(dt.datetime.fromisoformat(p["record"]["createdAt"].replace("Z", "+00:00")))
+        if posted < week[0][0] - dt.timedelta(days=1):
+            continue
+        emb = p.get("embed", {})
+        images = emb.get("images") or (emb.get("media") or {}).get("images") or []
+        for k, im in enumerate(images):
+            yield {"id": f"{p['uri'].rsplit('/', 1)[-1]}-{k}", "url": im["fullsize"],
+                   "day": day_of(text, posted, week),
+                   "link": f"https://bsky.app/profile/{handle}/post/{p['uri'].rsplit('/', 1)[-1]}"}
+
+
+def fetch_tumblr(blog, week):
+    raw = get(f"https://{blog}.tumblr.com/api/read/json?num=40")
+    data = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+    for p in data.get("posts", []):
+        body = p.get("regular-body", "") + p.get("photo-caption", "")
+        if "tumblr_blog" in body:  # a reblog
+            continue
+        tags = " ".join(t.lower() for t in p.get("tags", []))
+        if "radiojoy week" not in tags and "radiojoyweek" not in tags:
+            continue
+        posted = event_date(dt.datetime.fromtimestamp(int(p["unix-timestamp"]), dt.timezone.utc))
+        if posted < week[0][0] - dt.timedelta(days=1):
+            continue
+        text = html.unescape(re.sub(r"<[^>]+>", " ", body))
+        urls = []
+        for tag in re.findall(r"<img[^>]+>", body):
+            srcset = re.search(r'srcset="([^"]+)"', tag)
+            if srcset:
+                best = max((c.strip().rsplit(" ", 1) for c in html.unescape(srcset[1]).split(",")),
+                           key=lambda c: int(c[1].rstrip("w")))[0]
+            else:
+                best = re.search(r'src="([^"]+)"', tag)[1]
+            urls.append(best)
+        for ph in p.get("photos", []):
+            urls.append(ph["photo-url-1280"])
+        for k, u in enumerate(urls):
+            yield {"id": f"{p['id']}-{k}", "url": u, "day": day_of(text, posted, week),
+                   "link": p.get("url-with-slug") or p.get("url")}
+
+
+def collect(week):
+    """Download new week art into the cache; return the list of pieces."""
+    year_dir = CACHE / str(week[0][0].year)
+    year_dir.mkdir(parents=True, exist_ok=True)
+    index_file = year_dir / "index.json"
+    index = json.loads(index_file.read_text()) if index_file.exists() else {}
+    artists = THEME / "radiojoy-week-artists.txt"
+    for line in artists.read_text().splitlines() if artists.exists() else []:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        kind, account, name = (line.split(None, 2) + [""])[:3]
+        try:
+            found = list((fetch_bluesky if kind == "bluesky" else fetch_tumblr)(account, week))
+        except Exception as e:  # offline or the site changed: keep what we have
+            log(f"{account}: {e!r}")
+            continue
+        for art in found:
+            key = f"{kind}-{account}-{art['id']}"
+            if key in index or art["day"] is None:
+                continue
+            try:
+                data = get(art["url"], binary=True)
+            except Exception as e:
+                log(f"{key}: {e!r}")
+                continue
+            path = year_dir / (hashlib.sha1(key.encode()).hexdigest()[:12] + ".img")
+            path.write_bytes(data)
+            index[key] = {"file": path.name, "artist": name or account, "day": art["day"], "link": art["link"]}
+    index_file.write_text(json.dumps(index, indent=1))
+    pieces = [dict(v, key=k, path=str(year_dir / v["file"])) for k, v in index.items()]
+    return drop_shared(pieces)
+
+
+def drop_shared(pieces):
+    """An image an artist attaches to several posts (an event banner) isn't art."""
+    from PIL import Image
+    def ahash(p):
+        try:
+            im = Image.open(p["path"]).convert("L").resize((8, 8))
+        except Exception:
+            return None
+        px = list(im.tobytes())
+        avg = sum(px) / len(px)
+        return (p["artist"], tuple(v > avg for v in px))
+    hashes = {}
+    for p in pieces:
+        p["hash"] = ahash(p)
+        hashes.setdefault(p["hash"], set()).add(p["key"].rsplit("-", 1)[0])
+    return [p for p in pieces if p["hash"] is not None and len(hashes[p["hash"]]) == 1]
+
+
+def build(week, today, pieces, out):
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+    W, H = 1920, 1080
+    font = lambda name, size: ImageFont.truetype(str(FONTS / name), size)
+    title_f, day_f, prompt_f = font("NotoSerifDisplay-BoldItalic.ttf", 64), font("NotoSerif-Bold.ttf", 24), font("NotoSerif-Regular.ttf", 22)
+    small_f = font("NotoSerif-Italic.ttf", 17)
+    icon = lambda size: ImageFont.truetype("/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf", size)
+    STAR, CHECK, PLAY = "\uf005", "\uf00c", "\uf04b"  # Nerd Font icons; the serifs lack them
+
+    # crimson → periwinkle, like the theme's pair wallpaper
+    bg = Image.new("RGB", (W, H))
+    stops = [(0, (26, 6, 10)), (0.45, (66, 12, 26)), (0.7, (52, 38, 86)), (1, (24, 26, 58))]
+    grad = Image.new("RGB", (W, 1))
+    for x in range(W):
+        t = x / (W - 1)
+        for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
+            if t <= t1:
+                f = (t - t0) / (t1 - t0)
+                grad.putpixel((x, 0), tuple(int(c0[i] + (c1[i] - c0[i]) * f) for i in range(3)))
+                break
+    bg = grad.resize((W, H))
+    bg = bg.convert("RGBA")
+    d = ImageDraw.Draw(bg)
+
+    top = 70  # below the bar
+    d.text((60, top + 14), STAR, font=icon(52), fill=(242, 193, 78))
+    d.text((128, top), f"Radiojoy Week {week[0][0].year}", font=title_f, fill=(242, 193, 78))
+
+    # prompt list: done days crossed out, today highlighted
+    y = top + 120
+    for i, (day, prompt) in enumerate(week, 1):
+        label, rest = (prompt.split(":", 1) + [""])[:2]
+        if day < today:
+            col, mark = (157, 153, 188), CHECK
+        elif day == today:
+            col, mark = (242, 193, 78), PLAY
+            hl = Image.new("RGBA", bg.size, (0, 0, 0, 0))
+            ImageDraw.Draw(hl).rounded_rectangle((44, y - 10, 540, y + 72), 12, fill=(242, 193, 78, 45))
+            bg.alpha_composite(hl)
+            d = ImageDraw.Draw(bg)
+        else:
+            col, mark = (236, 233, 247), ""
+        d.text((60, y + 4), mark, font=icon(22), fill=col)
+        d.text((92, y), label.strip(), font=day_f, fill=col)
+        d.text((92, y + 32), rest.strip(), font=prompt_f, fill=col)
+        if day < today:  # done: crossed out
+            for yy, text, f in ((y + 17, label.strip(), day_f), (y + 47, rest.strip(), prompt_f)):
+                d.line((88, yy, 92 + d.textlength(text, font=f) + 4, yy), fill=(220, 34, 73), width=3)
+        y += 108
+    d.text((60, H - 70), f"{len(pieces)} piece{'s' if len(pieces) != 1 else ''} so far · art by the artists, credited on each",
+           font=small_f, fill=(200, 196, 220))
+
+    # the art, newest day last, in the biggest grid that fits
+    ax0, ay0, ax1, ay1 = 580, top + 110, W - 40, H - 40
+    pieces = sorted(pieces, key=lambda p: (p["day"], p["artist"], p["key"]))
+    if not pieces:
+        d.text(((ax0 + ax1) // 2, (ay0 + ay1) // 2), "The art arrives here as the artists post it",
+               font=prompt_f, fill=(236, 233, 247), anchor="mm")
+    else:
+        n, aw, ah = len(pieces), ax1 - ax0, ay1 - ay0
+        best = None
+        for cols in range(1, n + 1):
+            rows = -(-n // cols)
+            cw, ch = aw / cols, ah / rows
+            if best is None or min(cw, ch * 0.8) > best[2]:
+                best = (cols, rows, min(cw, ch * 0.8))
+        cols, rows, _ = best
+        cw, ch = aw / cols, ah / rows
+        for i, p in enumerate(pieces):
+            cx, cy = ax0 + (i % cols) * cw, ay0 + (i // cols) * ch
+            try:
+                im = Image.open(p["path"]).convert("RGB")
+            except Exception:
+                continue
+            bw, bh = cw - 24, ch - 44
+            s = min(bw / im.width, bh / im.height)
+            im = im.resize((max(1, int(im.width * s)), max(1, int(im.height * s))), Image.LANCZOS)
+            x, yy = int(cx + (cw - im.width) / 2), int(cy + 8 + (bh - im.height) / 2)
+            glow = Image.new("RGBA", bg.size, (0, 0, 0, 0))
+            ImageDraw.Draw(glow).rectangle((x - 6, yy - 6, x + im.width + 6, yy + im.height + 6), fill=(242, 193, 78, 90))
+            bg.alpha_composite(glow.filter(ImageFilter.GaussianBlur(10)))
+            d = ImageDraw.Draw(bg)
+            d.rectangle((x - 3, yy - 3, x + im.width + 2, yy + im.height + 2), outline=(236, 233, 247), width=2)
+            bg.paste(im, (x, yy))
+            d.text((x + im.width / 2, yy + im.height + 18), f"Day {p['day']} · {p['artist']}",
+                   font=small_f, fill=(236, 233, 247), anchor="mm")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".tmp.png")
+    bg.convert("RGB").save(tmp)
+    tmp.replace(out)
+
+
+def set_wallpaper(path):
+    subprocess.run(["omarchy-theme-bg-set", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def main():
+    if not (THEME / "radiojoy").exists():
+        return
+    today = dt.date.today()
+    week = week_days(today)
+    current = os.path.realpath(BG_LINK)
+    old = sorted(OUT_DIR.glob("radiojoy-week-*.png"))
+    if not week:
+        for f in old:  # the week is over: back to the normal wallpapers
+            f.unlink()
+        if any(current == str(f.resolve()) for f in old) or (old and not Path(current).exists()):
+            first = sorted((THEME / "backgrounds").glob("*"))
+            if first:
+                set_wallpaper(first[0])
+        return
+    out = OUT_DIR / f"radiojoy-week-{week[0][0].year}.png"
+    pieces = collect(week)
+    sig = hashlib.sha1(json.dumps([str(today)] + sorted(p["key"] for p in pieces)).encode()).hexdigest()
+    state = CACHE / "state.json"
+    last = json.loads(state.read_text()).get("sig") if state.exists() else None
+    if sig == last and out.exists() and "--force" not in sys.argv:
+        return
+    build(week, today, pieces, out)
+    state.write_text(json.dumps({"sig": sig}))
+    set_wallpaper(out)  # a new day or new art: show it
+
+
+if __name__ == "__main__":
+    main()

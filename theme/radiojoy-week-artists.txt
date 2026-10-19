@@ -1,0 +1,5 @@
+# Artists whose Radiojoy Week posts go into the week collage (radiojoy-week).
+# Only add artists you have checked draw by hand, and whose art you may show.
+# Format: <bluesky|tumblr> <account> <name shown>
+# bluesky someartist.bsky.social Some Artist
+# tumblr someartist someartist

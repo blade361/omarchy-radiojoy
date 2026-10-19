@@ -26,6 +26,12 @@ Radiojoy one gives you both.
 - **Radiojoy Week:** during the week in `radiojoy-week.txt` (2026: Oct 18–24) the bar
   button wears a ★ and shows the day's prompt, and the terminal shows it too; the rest
   of the year it counts down. While Spotify plays, the button goes **on air**.
+- **Radiojoy Week wallpaper:** during the week your wallpaper becomes a collage of that
+  week's art with the prompt list beside it, finished days crossed out. An hourly timer
+  adds new pieces as the artists post them and switches the wallpaper to the new collage
+  when it changes; after the week it's removed. List the artists in
+  `~/.config/omarchy/themes/radiojoy/radiojoy-week-artists.txt` (Bluesky or Tumblr
+  accounts, only ones you've checked draw by hand); with none, it shows just the prompts.
 - **Terminal splash:** the art is drawn as a real image beside fastfetch and "tunes in"
   through radio static, with a quote and a little status line under it. Terminals you haven't typed in yet redraw when the wallpaper changes.
 - **Lock screen:** every time you lock, the background steps to the next wallpaper in the order.

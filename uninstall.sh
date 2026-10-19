@@ -8,13 +8,14 @@ if [[ -f $HOME/.local/state/omarchy/current/theme/radiojoy ]]; then
   exit 1
 fi
 
-systemctl --user disable --now radiojoy-sync.path >/dev/null 2>&1
-rm -f "$HOME"/.config/systemd/user/radiojoy-sync.{path,service}
+systemctl --user disable --now radiojoy-sync.path radiojoy-week.timer >/dev/null 2>&1
+rm -f "$HOME"/.config/systemd/user/radiojoy-sync.{path,service} "$HOME"/.config/systemd/user/radiojoy-week.{timer,service}
+rm -f "$HOME"/.config/omarchy/backgrounds/radiojoy/radiojoy-week-*.png
 systemctl --user daemon-reload
 
 # reset terminal colours and Zen/Firefox colours while the scripts still exist
 "$HOME/.local/bin/radiojoy-sync" >/dev/null 2>&1
-rm -f "$HOME"/.local/bin/radiojoy-{sync,splash,splash-refresh,sixel,lock-background,term-colors}
+rm -f "$HOME"/.local/bin/radiojoy-{sync,splash,splash-refresh,sixel,lock-background,term-colors,week}
 rm -f "$HOME/.config/omarchy/hooks/theme-set.d/radiojoy" "$HOME/.config/omarchy/hooks/post-boot.d/radiojoy"
 omarchy plugin disable radiojoy.button >/dev/null 2>&1
 rm -rf "$HOME/.config/omarchy/plugins/radiojoy.button"
@@ -34,6 +35,6 @@ if command -v spicetify >/dev/null; then
   spicetify config extensions radiojoy-follow.js- >/dev/null 2>&1 && spicetify apply >/dev/null 2>&1
 fi
 
-rm -rf "$HOME/.config/omarchy/themes/radiojoy" "${XDG_CACHE_HOME:-$HOME/.cache}/radiojoy-sixel"
+rm -rf "$HOME/.config/omarchy/themes/radiojoy" "${XDG_CACHE_HOME:-$HOME/.cache}/radiojoy-sixel" "${XDG_CACHE_HOME:-$HOME/.cache}/radiojoy-week"
 rm -f "$HOME/.local/state/omarchy/radiojoy-border" "$HOME/.local/state/omarchy/radiojoy-lock-background" "$HOME/.local/state/omarchy/radiojoy-term-colors"
 echo "omarchy-radiojoy removed."

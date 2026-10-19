@@ -10,6 +10,12 @@ if [[ ! -f $s/current/theme/radiojoy || ! -d $dir ]]; then
   echo "$wall"
   exit 0
 fi
+# During Radiojoy Week the lock shows the week's collage too.
+collage=$HOME/.config/omarchy/backgrounds/radiojoy/radiojoy-week-$(date +%Y).png
+if grep -qs "^$(date +%F)"$'\t' "$s/current/theme/radiojoy-week.txt" && [[ -f $collage ]]; then
+  readlink -f "$collage"
+  exit 0
+fi
 mapfile -t list < <(find -L "$dir" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.png' -o -iname '*.webp' \) | sort)
 last=$(readlink -f "$s/radiojoy-lock-background" 2>/dev/null)
 # start from the desktop wallpaper unless the remembered one belongs to this theme

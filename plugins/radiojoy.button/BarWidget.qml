@@ -8,7 +8,8 @@ import qs.Ui
 // NN-alastor.* / NN-emily.* show that character's icons and quotes, anything else both.
 // During Radiojoy Week (theme file radiojoy-week.txt) it wears a star and shows the
 // day's prompt; while Spotify plays it goes "on air".
-// Left-click: next theme wallpaper. Right-click: a random line from the matching quotes.
+// Left-click: next theme wallpaper (not during the week: the collage stays).
+// Right-click: a random line from the matching quotes.
 BarWidget {
   id: root
   moduleName: "radiojoy.button"
@@ -63,13 +64,15 @@ BarWidget {
     tooltipText: (root.rjWho === "-alastor" ? "Alastor" : (root.rjWho === "-emily" ? "Emily" : "Radiojoy"))
       + (root.rjOnAir ? " · ON AIR" : "")
       + (root.rjWeek ? "\n★ Radiojoy Week · " + root.rjWeek : "")
-      + "\nleft: next wallpaper · right: tune in"
+      + (root.rjWeek ? "\nwallpaper locked to the week\u2019s collage · right: tune in" : "\nleft: next wallpaper · right: tune in")
     onPressed: function(button) {
       if (button === Qt.RightButton)
         root.sh("d=" + root.themeDir + "/splash; f=$d/quotes" + root.rjWho + ".txt; [[ -s $f ]] || f=$d/quotes.txt; q=$(shuf -n1 \"$f\"); " +
           (root.rjWeek
             ? "notify-send -a Radiojoy '★ Radiojoy Week' \"" + root.rjWeek + "\n$q\""
             : "notify-send -a Radiojoy 'Now broadcasting' \"$q\""))
+      else if (root.rjWeek)
+        root.sh("notify-send -a Radiojoy '\uf005 Radiojoy Week' 'The wallpaper is the week\u2019s collage until the week ends.'")
       else
         root.sh("omarchy theme bg next")
     }

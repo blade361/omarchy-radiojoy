@@ -15,6 +15,16 @@ case $(readlink -f "$s/current/background") in
 esac
 active=; [[ -f $t/radiojoy ]] && active=1
 
+# During Radiojoy Week the wallpaper is the week's collage and can't be changed:
+# any other wallpaper is switched straight back (that switch runs this again).
+if [[ $active ]] && grep -qs "^$(date +%F)"$'\t' "$t/radiojoy-week.txt"; then
+  collage=$HOME/.config/omarchy/backgrounds/radiojoy/radiojoy-week-$(date +%Y).png
+  if [[ -f $collage && $(readlink -f "$s/current/background") != "$(readlink -f "$collage")" ]]; then
+    omarchy-theme-bg-set "$collage" >/dev/null 2>&1
+    exit 0
+  fi
+fi
+
 # Screensaver: the user's own art is kept in screensaver.user.txt meanwhile.
 if [[ $active ]]; then
   src=$t/screensaver${who:+-$who}.txt

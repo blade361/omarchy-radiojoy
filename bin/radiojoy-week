@@ -8,7 +8,9 @@
 # a few days). Run hourly by radiojoy-week.timer.
 #   --discover  look for an upcoming Radiojoy Week (radiojoy-week-discover.timer):
 #               reads announcement banners with OCR, adds the dates and prompts to
-#               radiojoy-week.txt and sends a notification to check them.
+#               radiojoy-week.txt and sends a notification to check them. Only the
+#               listed artists' posts are added like that; DeviantArt finds (anyone
+#               can post) become suggestions: radiojoy-week --accept YYYY-MM-DD
 import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.parse, urllib.request
 from pathlib import Path
 
@@ -19,6 +21,15 @@ CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "radiojoy-week
 BG_LINK = HOME / ".local/state/omarchy/current/background"
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) omarchy-radiojoy"}
 FONTS = Path("/usr/share/fonts/noto")
+
+
+def pil():
+    """PIL with a pixel budget: oversized ("decompression bomb") images fail to open."""
+    import warnings
+    from PIL import Image
+    Image.MAX_IMAGE_PIXELS = 40_000_000
+    warnings.simplefilter("error", Image.DecompressionBombWarning)
+    return Image
 
 
 def log(*a):
@@ -194,7 +205,7 @@ def collect(week):
 
 def drop_shared(pieces):
     """An image an artist attaches to several posts (an event banner) isn't art."""
-    from PIL import Image
+    Image = pil()
     def ahash(p):
         try:
             im = Image.open(p["path"]).convert("L").resize((8, 8))
@@ -211,7 +222,8 @@ def drop_shared(pieces):
 
 
 def build(week, today, pieces, out, final=False):
-    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+    from PIL import ImageDraw, ImageFilter, ImageFont
+    Image = pil()
     W, H = 1920, 1080
     font = lambda name, size: ImageFont.truetype(str(FONTS / name), size)
     title_f, day_f, prompt_f = font("NotoSerifDisplay-BoldItalic.ttf", 64), font("NotoSerif-Bold.ttf", 24), font("NotoSerif-Regular.ttf", 22)
@@ -332,6 +344,8 @@ def main():
         return
     if "--discover" in sys.argv:
         return discover()
+    if "--accept" in sys.argv:
+        return accept(sys.argv[sys.argv.index("--accept") + 1])
     today = dt.date.today()
     state = load_state()
     force = "--force" in sys.argv
@@ -378,7 +392,10 @@ def parse_announcement(text):
                   + r" )?(\d{1,2})(?:st|nd|rd|th)?,? ?(20\d\d)", t, re.I)
     if not m:
         return None
-    start = dt.date(int(m[5]), [x[:3] for x in MONTHS].index(m[1].lower()) + 1, int(m[2]))
+    try:
+        start = dt.date(int(m[5]), [x[:3] for x in MONTHS].index(m[1].lower()) + 1, int(m[2]))
+    except ValueError:  # "February 31" and the like
+        return None
     prompts, last = {}, None
     for line in t.splitlines():
         line = line.strip()
@@ -397,20 +414,30 @@ def ocr(data):
     import shutil, tempfile
     if not shutil.which("tesseract"):
         return ""
-    from PIL import Image, ImageOps
+    from PIL import ImageOps
     import io
+    Image = pil()
     try:
-        im = Image.open(io.BytesIO(data)).convert("L")
+        im = Image.open(io.BytesIO(data))
+        if im.width * im.height > 16_000_000:  # announcements are small; skip giant images
+            return ""
+        im = im.convert("L")
     except Exception:
         return ""
-    im = ImageOps.autocontrast(im.resize((im.width * 2, im.height * 2)))
+    if im.width * im.height < 4_000_000:  # small text reads better enlarged
+        im = im.resize((im.width * 2, im.height * 2))
+    im = ImageOps.autocontrast(im)
     with tempfile.NamedTemporaryFile(suffix=".png") as f:
         im.save(f.name)
-        return subprocess.run(["tesseract", f.name, "-"], capture_output=True, text=True).stdout
+        try:
+            return subprocess.run(["tesseract", f.name, "-"], capture_output=True, text=True, timeout=60).stdout
+        except subprocess.TimeoutExpired:
+            return ""
 
 
 def announcements():
-    """(text, [image urls], link) for recent posts that mention a Radiojoy Week."""
+    """(text, [image urls], link, trusted) for recent posts that mention a Radiojoy Week.
+    trusted: from an artist in radiojoy-week-artists.txt."""
     artists = THEME / "radiojoy-week-artists.txt"
     for line in artists.read_text().splitlines() if artists.exists() else []:
         if not line.strip() or line.lstrip().startswith("#"):
@@ -422,18 +449,22 @@ def announcements():
                                       f"?actor={account}&limit=60"))
                 for item in feed.get("feed", []):
                     p = item["post"]
+                    if item.get("reason") or p["author"]["handle"] != account:  # reposts, others
+                        continue
                     emb = p.get("embed", {})
                     imgs = emb.get("images") or (emb.get("media") or {}).get("images") or []
                     yield (p["record"].get("text", ""), [i["fullsize"] for i in imgs],
-                           f"https://bsky.app/profile/{p['author']['handle']}/post/{p['uri'].rsplit('/', 1)[-1]}")
+                           f"https://bsky.app/profile/{account}/post/{p['uri'].rsplit('/', 1)[-1]}", True)
             else:
                 raw = get(f"https://{account}.tumblr.com/api/read/json?num=50")
                 for p in json.loads(raw[raw.index("{"):raw.rindex("}") + 1]).get("posts", []):
                     body = p.get("regular-body", "") + p.get("photo-caption", "")
+                    if "tumblr_blog" in body:  # a reblog
+                        continue
                     text = html.unescape(re.sub(r"<[^>]+>", " ", body)) + " " + " ".join(p.get("tags", []))
                     imgs = [re.search(r'src="([^"]+)"', t)[1] for t in re.findall(r"<img[^>]+>", body)]
                     imgs += [ph["photo-url-1280"] for ph in p.get("photos", [])]
-                    yield text, imgs, p.get("url-with-slug") or p.get("url")
+                    yield text, imgs, p.get("url-with-slug") or p.get("url"), True
         except Exception as e:
             log(f"{account}: {e!r}")
     try:  # DeviantArt's public search feed reaches beyond the listed artists
@@ -443,9 +474,25 @@ def announcements():
             desc = html.unescape((re.search(r"<description>(.*?)</description>", item, re.S) or [None, ""])[1])
             img = re.search(r'<media:content url="([^"]+)"', item)
             link = re.search(r"<link>(.*?)</link>", item)[1]
-            yield title + "\n" + re.sub(r"<[^>]+>", " ", desc), [html.unescape(img[1])] if img else [], link
+            # anyone can post there: these only become suggestions you confirm
+            yield title + "\n" + re.sub(r"<[^>]+>", " ", desc), [html.unescape(img[1])] if img else [], link, False
     except Exception as e:
         log(f"deviantart: {e!r}")
+
+
+def clean(text, limit=80):
+    """Prompt text from a post or OCR: no markup or control characters, bounded."""
+    text = re.sub(r"[<>&\x00-\x1f\x7f]", "", text)
+    return re.sub(r"\s+", " ", text).strip()[:limit]
+
+
+def add_week(start, prompts, note):
+    lines = [f"{start + dt.timedelta(days=i)}\t{p}" for i, p in enumerate(prompts)]
+    for theme_dir in (HOME / ".config/omarchy/themes/radiojoy", THEME):
+        f = theme_dir / "radiojoy-week.txt"
+        if f.exists():
+            with f.open("a") as fh:
+                fh.write(f"# {note}\n" + "\n".join(lines) + "\n")
 
 
 def discover():
@@ -453,8 +500,9 @@ def discover():
     known = {w[0][0].year for w in all_weeks()}
     state = load_state()
     seen = set(state.get("discover-seen", []))
+    suggestions = state.get("suggestions", {})
     found = {}
-    for text, imgs, link in announcements():
+    for text, imgs, link, trusted in announcements():
         if not re.search(r"radio\s*joy\s*week", text, re.I):
             continue
         hit = parse_announcement(text)
@@ -470,35 +518,46 @@ def discover():
                     hit = img_hit
                 if hit and hit[1]:
                     break
-        if not hit or hit[0] < today or hit[0].year in known:
+        if not hit or hit[0] < today or hit[0].year in known or hit[0] > today + dt.timedelta(days=400):
             continue
-        found.setdefault(hit[0], (hit[1], link))
-        if hit[1]:
-            found[hit[0]] = (hit[1], link)
+        prompts = [clean(p) for p in hit[1]]
+        prev = found.get(hit[0])
+        # prefer a trusted source, then one that has the prompts
+        if prev is None or (trusted, bool(prompts)) > (prev[2], bool(prev[0])):
+            found[hit[0]] = (prompts, link, trusted)
 
-    for start, (prompts, link) in sorted(found.items()):
-        # announced-without-prompts is remembered separately, so the prompts are
-        # still picked up when they're posted later
-        key = f"{start}" if prompts else f"{start}?"
+    for start, (prompts, link, trusted) in sorted(found.items()):
+        key = f"{start}" if prompts else f"{start}?"  # prompts may come later
         if key in seen:
             continue
         seen.add(key)
-        if prompts:
-            lines = [f"{start + dt.timedelta(days=i)}\t{p}" for i, p in enumerate(prompts)]
-            for theme_dir in (HOME / ".config/omarchy/themes/radiojoy", THEME):
-                f = theme_dir / "radiojoy-week.txt"
-                if f.exists():
-                    with f.open("a") as fh:
-                        fh.write(f"# found {today} by radiojoy-week --discover ({link}); check the prompts\n")
-                        fh.write("\n".join(lines) + "\n")
+        end = start + dt.timedelta(days=max(len(prompts), 7) - 1)
+        if trusted and prompts:
+            add_week(start, prompts, f"found {today} by radiojoy-week --discover ({link}); check the prompts")
             notify(f"\uf005 Radiojoy Week {start.year} is coming!",
-                   f"{start:%B %-d}–{start + dt.timedelta(days=len(prompts) - 1):%-d}. The prompts were read from the "
-                   f"announcement, please check them in radiojoy-week.txt:\n" + "\n".join(prompts) + f"\n{link}")
+                   f"{start:%B %-d}–{end:%-d}. The prompts were read from the announcement, please check "
+                   "them in radiojoy-week.txt:\n" + "\n".join(prompts) + f"\n{link}")
+        elif prompts:
+            suggestions[str(start)] = {"prompts": prompts, "link": link}
+            notify(f"\uf005 Radiojoy Week {start.year}? (unconfirmed)",
+                   f"A DeviantArt post says {start:%B %-d}–{end:%-d}. If it's real, run:\n"
+                   f"radiojoy-week --accept {start}\n{link}")
         else:
             notify(f"\uf005 Radiojoy Week {start.year} announced",
-                   f"Starts {start:%B %-d}, but I couldn't read the prompts. Add them to radiojoy-week.txt:\n{link}")
+                   f"Starts {start:%B %-d}, but I couldn't read the prompts yet. I'll keep looking:\n{link}")
     state["discover-seen"] = sorted(seen)
+    state["suggestions"] = suggestions
     save_state(state)
+
+
+def accept(start):
+    state = load_state()
+    sug = state.get("suggestions", {}).pop(start, None)
+    if not sug:
+        sys.exit(f"no suggested Radiojoy Week starting {start}")
+    add_week(dt.date.fromisoformat(start), sug["prompts"], f"accepted {dt.date.today()} ({sug['link']})")
+    save_state(state)
+    print(f"Added Radiojoy Week starting {start}. Check the prompts in radiojoy-week.txt.")
 
 
 if __name__ == "__main__":

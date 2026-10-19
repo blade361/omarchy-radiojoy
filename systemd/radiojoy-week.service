@@ -4,4 +4,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+# posts and images come from the internet: bound what one run can use
+MemoryMax=1G
+RuntimeMaxSec=10min
 ExecStart=%h/.local/bin/radiojoy-week

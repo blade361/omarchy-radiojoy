@@ -27,17 +27,21 @@ Radiojoy one gives you both.
   button wears a ★ and shows the day's prompt, and the terminal shows it too; the rest
   of the year it counts down. While Spotify plays, the button goes **on air**.
 - **Radiojoy Week wallpaper:** during the week your wallpaper becomes a collage of that
-  week's art with the prompt list beside it, finished days crossed out. An hourly timer
+  week's art with the prompt list beside it, finished days crossed out. It's locked for
+  the week (the lock screen shows it too); the week's art only appears in the collage,
+  not as separate wallpapers. An hourly timer
   adds new pieces as the artists post them and switches the wallpaper to the new collage
   when it changes; after the week it's removed. List the artists in
   `~/.config/omarchy/themes/radiojoy/radiojoy-week-artists.txt` (Bluesky or Tumblr
   accounts, only ones you've checked draw by hand); with none, it shows just the prompts.
   When the week is over the collage stays in the wallpaper carousel as a keepsake
   ("Radiojoy Week 2026"), with all of the week's art.
-- **Next year's week:** once a week it looks for an upcoming Radiojoy Week (your listed
-  artists' posts and DeviantArt), reads the dates and prompts off the announcement
-  banner (OCR), adds them to `radiojoy-week.txt` and sends you a notification to check
-  them, since OCR can misread a word.
+- **Next year's week:** once a week it looks for an upcoming Radiojoy Week, reading the
+  dates and prompts off the announcement banner (OCR). Where it looks: the Bluesky and
+  Tumblr accounts in `radiojoy-week-artists.txt`, and DeviantArt's public search. Weeks
+  found in your listed artists' posts are added to `radiojoy-week.txt` (with a
+  notification to check the prompts, since OCR can misread a word); DeviantArt finds,
+  which anyone can post, are only suggested: `radiojoy-week --accept YYYY-MM-DD` adds one.
 - **Terminal splash:** the art is drawn as a real image beside fastfetch and "tunes in"
   through radio static, with a quote and a little status line under it. Terminals you haven't typed in yet redraw when the wallpaper changes.
 - **Lock screen:** every time you lock, the background steps to the next wallpaper in the order.

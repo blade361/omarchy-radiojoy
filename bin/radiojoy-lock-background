@@ -1,0 +1,27 @@
+#!/bin/bash
+# Prints the lock screen background. While the Radiojoy theme is active, `next`
+# moves one step along the theme's wallpapers on every lock (Alastor → Emily →
+# Radiojoy …), remembered in ~/.local/state/omarchy/radiojoy-lock-background.
+# Other themes: the desktop wallpaper, as stock Omarchy does.
+s="$HOME/.local/state/omarchy"
+wall=$(readlink -f "$s/current/background")
+dir="$s/current/theme/backgrounds"
+if [[ ! -f $s/current/theme/radiojoy || ! -d $dir ]]; then
+  echo "$wall"
+  exit 0
+fi
+mapfile -t list < <(find -L "$dir" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.png' -o -iname '*.webp' \) | sort)
+last=$(readlink -f "$s/radiojoy-lock-background" 2>/dev/null)
+# start from the desktop wallpaper unless the remembered one belongs to this theme
+[[ -f $last && ${last%/*} == "$(readlink -f "$dir")" ]] || last=$wall
+pick=$last
+if [[ $1 == next ]]; then
+  for i in "${!list[@]}"; do
+    if [[ $(readlink -f "${list[i]}") == "$last" ]]; then
+      pick=${list[(i + 1) % ${#list[@]}]}
+      break
+    fi
+  done
+  ln -nsf "$(readlink -f "$pick")" "$s/radiojoy-lock-background"
+fi
+readlink -f "$pick"

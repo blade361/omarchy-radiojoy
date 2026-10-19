@@ -1,0 +1,5 @@
+# Window border per wallpaper (read by my-border-sync): Alastor's crimson, gold grin
+# and maroon; Emily's periwinkle, lavender-white and halo blue; both for the rest.
+alastor=rgba(dc2249ee) rgba(f2c14eee) rgba(6f0c14ee)
+emily=rgba(7d82bcee) rgba(ece9f7ee) rgba(a6d8ecee)
+radiojoy=rgba(dc2249ee) rgba(f2c14eee) rgba(7d82bcee)

@@ -1,0 +1,8 @@
+[Unit]
+Description=Radiojoy: sync screensaver, border, Spotify and terminal splashes with the wallpaper
+# fast wallpaper clicks start this many times a second; never refuse a start
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/radiojoy-sync

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "radiojoy.button",
+  "name": "Radiojoy",
+  "version": "1.0.0",
+  "author": "blade361",
+  "description": "Radiojoy theme button: left-click next wallpaper, right-click a line from the station. Hidden on other themes.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": { "displayName": "Radiojoy", "description": "Next Radiojoy wallpaper / a quote; only shown on the Radiojoy theme", "category": "Fun", "allowMultiple": false, "defaultSection": "left" }
+}

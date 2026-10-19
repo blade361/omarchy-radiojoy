@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# Radiojoy terminal splash: fastfetch with Alastor / Emily / both drawn beside it as a
+# real image (sixel), "tuning in" through radio static, plus a quote. Follows the
+# wallpaper. Terminals without sixel/pixel sizes get the half-block text version.
+# Any key skips the animation. RADIOJOY_SPLASH_LOOPS=0 turns the animation off.
+# --into TTY redraws the whole splash in another (still unused) terminal from the top;
+# radiojoy-splash-refresh uses it when the wallpaper changes. It never reads that
+# terminal's input.
+
+theme=~/.local/state/omarchy/current/theme
+[[ -f $theme/radiojoy ]] || exit 0
+bin=$(dirname "$(readlink -f "$0")")
+pad_top=2 pad_left=2
+loops=${RADIOJOY_SPLASH_LOOPS:-1}
+logo=() mode=text frames=()
+pad=(--logo-padding-top "$pad_top" --logo-padding-left "$pad_left")
+
+into=
+if [[ $1 == --into ]]; then
+  into=$2
+  exec >"$into" </dev/null
+  printf '\e[H\e[2J'
+fi
+term=${into:-/dev/tty}
+term_name=${into:-$(tty)}
+
+# Draws frames[1..] then frames[0] at the saved cursor position (\e7); any key skips.
+play() {
+  if [[ -t 0 ]]; then
+    # global, not local: the EXIT trap runs after this function has returned
+    __stty_saved=$(stty -g); stty -echo -icanon
+    trap 'stty "$__stty_saved"; printf "\e[?25h"' EXIT
+  fi
+  printf '\e[?25l'
+  for ((l = 0; l < loops; l++)); do
+    for ((i = 1; i < ${#frames[@]}; i++)); do
+      printf '\e8%s' "${frames[i]}"
+      if [[ -t 0 ]]; then read -rsn1 -t 0.08 && break 2; else sleep 0.08; fi
+    done
+  done
+  printf '\e8%s\e[?25h' "${frames[0]}"
+}
+
+# A random line from the matching quotes file (Emily's in her periwinkle).
+quote() {
+  [[ -s $quotes ]] &&
+    printf '\n%*s\e[3;38;2;%sm%s\e[0m\n' "$pad_left" "" "$([[ $who == -emily ]] && echo 180\;184\;240 || echo 220\;34\;73)" "$(shuf -n1 "$quotes")"
+}
+
+# Remembers this terminal so radiojoy-splash-refresh can redraw it when the wallpaper
+# changes, until the shell's second prompt (see the .bashrc block) marks it as used.
+# $1 = lines from the art's top row down to the cursor; $2 = the cursor row when known.
+remember() {
+  local row=$2 _ dir=${XDG_RUNTIME_DIR:-/tmp}/radiojoy-splash
+  [[ $row ]] || IFS='[;' read -rs -d R -t 0.5 -p $'\e[6n' _ row _ </dev/tty || return
+  (( row > lines )) && row=$lines
+  # starship's add_newline puts one more line before the prompt; it scrolls if at the bottom
+  (( row + 1 > lines )) && (( row -= row + 1 - lines ))
+  (( row - $1 >= 1 )) || return
+  mkdir -p "$dir"
+  printf 'pid=%s\ntty=%s\nterm=%s\nsize=%s\nart=%s\n' \
+    "${RADIOJOY_PID:-$PPID}" "$term_name" "$TERM" "$lines $cols" "$art" >"$dir/${term_name##*/}"
+}
+
+# The splash follows the wallpaper: NN-alastor.* / NN-emily.* use that character's
+# art-<name>.png, text-<name>/ and quotes-<name>.txt; anything else the shared ones.
+splash=$theme/splash
+case $(readlink -f ~/.local/state/omarchy/current/background) in
+  *-alastor.*) who=-alastor ;;
+  *-emily.*) who=-emily ;;
+  *) who= ;;
+esac
+art=$splash/art$who.png; [[ -f $art ]] || art=$splash/art.png
+dir=$splash/text$who; [[ -f $dir/00.txt ]] || dir=$splash
+quotes=$splash/quotes$who.txt; [[ -s $quotes ]] || quotes=$splash/quotes.txt
+
+# a new terminal starts at 80x24 and gets its real size a moment later
+[[ $into ]] || for _ in {1..10}; do [[ $(stty -F "$term" size 2>/dev/null) != "24 80" ]] && break; sleep 0.05; done
+read -r lines cols < <(stty -F "$term" size 2>/dev/null)
+[[ $lines && $cols ]] || exec fastfetch
+
+# the info column's width, from the user's own fastfetch config
+info=$(fastfetch --pipe false --logo none)
+info_cols=$(( $(printf '%s\n' "$info" | sed 's/\x1b\[[0-9;]*m//g' | wc -L) + 2 ))
+
+if [[ -f $art && -t 1 && ( -t 0 || -n $into ) ]]; then
+  # art beside the info, as tall as the window allows (room left for the quote and
+  # prompt) and only as narrow as needed so all the info fits on its right
+  side_rows=$(( lines - 6 ))
+  if read -r w0 _ < <("$bin/radiojoy-sixel" "$art" 20 --probe --tty "$term" 2>/dev/null); then
+    fit=$(( (cols - pad_left - info_cols - 1) * 20 / w0 ))
+    (( fit < side_rows )) && side_rows=$fit
+  fi
+  # else above the info, sized so both stay on screen
+  if (( side_rows >= 8 )) && read -r w _ < <("$bin/radiojoy-sixel" "$art" "$side_rows" --probe --tty "$term" 2>/dev/null) &&
+    (( w + pad_left + info_cols <= cols )); then
+    mode=side rows=$side_rows
+  else
+    top_rows=$(( lines - $(printf '%s\n' "$info" | wc -l) - 4 ))  # 2 more for the quote
+    (( top_rows > 20 )) && top_rows=20
+    if (( top_rows >= 6 )) && read -r w _ < <("$bin/radiojoy-sixel" "$art" "$top_rows" --probe --tty "$term" 2>/dev/null) &&
+      (( w + pad_left <= cols )); then
+      mode=top rows=$top_rows
+    fi
+  fi
+  if [[ $mode != text ]] && read -r w h six < <("$bin/radiojoy-sixel" "$art" "$rows" --tty "$term" 2>/dev/null); then
+    for f in "$six"/[0-9][0-9].six; do frames+=("$(<"$f")"); done
+    (( loops > 0 )) || frames=("${frames[0]}")
+  else
+    mode=text
+  fi
+fi
+
+if [[ $mode == top ]]; then
+  # reserve the art's rows, draw it there, then print the info below it
+  printf "\n%.0s" $(seq "$h")
+  printf '\e[%dA\e[%dG\e7' "$h" "$((pad_left + 1))"
+  play
+  printf '\e8\e[%dB\r' "$h"
+  printf '%s\n' "$info"
+  quote
+  n_info=$(printf '%s\n' "$info" | wc -l)
+  remember $(( h + n_info + 2 )) ${into:+$(( h + n_info + 3 ))}
+  exit 0
+fi
+
+if [[ $mode == side ]]; then
+  # fastfetch lays out around a blank logo of the right size; the image is drawn over it
+  blank=$six/blank.txt
+  [[ -f $blank ]] || for ((k = 0; k < h; k++)); do printf "%${w}s\n" ""; done >"$blank"
+  logo=(--logo "$blank" --logo-type file-raw --logo-width "$w" --logo-height "$h" "${pad[@]}")
+else
+  tw=$(head -1 "$dir/00.txt" | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\n' | wc -m)
+  if (( tw + pad_left + info_cols <= cols )); then
+    logo=(--logo "$dir/00.txt" --logo-type file-raw --logo-width "$tw" --logo-height "$(wc -l <"$dir/00.txt")" "${pad[@]}")
+  else
+    # too narrow for any art beside the info: just the info, no animation
+    logo=(--logo none) loops=0
+  fi
+fi
+
+out=$(fastfetch --pipe false "${logo[@]}")
+printf '%s\n' "$out"
+
+n=$(printf '%s\n' "$out" | wc -l)
+(( n < lines )) && [[ -t 1 && ( -t 0 || -n $into ) ]] || exit 0
+if [[ $mode == text ]]; then
+  (( loops > 0 )) || { quote; exit 0; }
+  # one line per logo row, each re-anchored to the logo column
+  for f in "$dir"/[0-9][0-9].txt; do
+    s=
+    while IFS= read -r line; do s+="$line"$'\e[1B\e['"$((pad_left + 1))G"; done <"$f"
+    frames+=("$s")
+  done
+fi
+printf '\e[%dA\e[%dG\e7' "$((n - pad_top))" "$((pad_left + 1))"
+play
+printf '\e8\e[%dB\r' "$((n - pad_top))"
+quote
+[[ $mode == side ]] && remember $(( n - pad_top + 2 )) ${into:+$(( n + 3 ))}

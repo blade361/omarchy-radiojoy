@@ -1,0 +1,3 @@
+#!/bin/bash
+# omarchy-radiojoy: apply or undo the per-wallpaper extras after a theme change.
+exec "$HOME/.local/bin/radiojoy-sync"

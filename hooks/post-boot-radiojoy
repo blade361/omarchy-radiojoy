@@ -1,0 +1,5 @@
+#!/bin/bash
+# omarchy-radiojoy: a radio "tuning in" sound at login while the theme is active.
+t="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme"
+[[ -f $t/radiojoy && -f $t/login.ogg ]] && pw-play "$t/login.ogg" >/dev/null 2>&1 &
+exit 0

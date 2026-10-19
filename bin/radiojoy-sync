@@ -1,0 +1,64 @@
+#!/bin/bash
+# Makes the desktop follow the wallpaper while the Radiojoy theme is active:
+# Alastor wallpapers (NN-alastor.*), Emily wallpapers (NN-emily.*) and Radiojoy
+# ones (anything else) each get their own screensaver art, window border and
+# Spotify colours, and unused terminals redraw their splash. On other themes it
+# puts everything back. Run by radiojoy-sync.path and the theme-set hook.
+s="$HOME/.local/state/omarchy"
+t="$s/current/theme"
+branding="$HOME/.config/omarchy/branding"
+
+case $(readlink -f "$s/current/background") in
+  *-alastor.*) who=alastor ;;
+  *-emily.*) who=emily ;;
+  *) who= ;;
+esac
+active=; [[ -f $t/radiojoy ]] && active=1
+
+# Screensaver: the user's own art is kept in screensaver.user.txt meanwhile.
+if [[ $active ]]; then
+  src=$t/screensaver${who:+-$who}.txt
+  [[ -f $src ]] || src=$t/screensaver.txt
+  mkdir -p "$branding"
+  [[ -f $branding/.radiojoy ]] || { [[ -f $branding/screensaver.txt ]] && cp "$branding/screensaver.txt" "$branding/screensaver.user.txt"; }
+  cmp -s "$src" "$branding/screensaver.txt" || cp "$src" "$branding/screensaver.txt"
+  touch "$branding/.radiojoy"
+elif [[ -f $branding/.radiojoy ]]; then
+  if [[ -f $branding/screensaver.user.txt ]]; then
+    mv "$branding/screensaver.user.txt" "$branding/screensaver.txt"
+  else
+    rm -f "$branding/screensaver.txt"
+  fi
+  rm -f "$branding/.radiojoy"
+fi
+
+# Window border: the theme's hyprland.lua reads radiojoy-border on every reload;
+# apply it live too.
+if [[ $active ]]; then
+  colors=$(sed -n "s/^${who:-radiojoy}=//p" "$t/borders")
+  if [[ -n $colors && $(cat "$s/radiojoy-border" 2>/dev/null) != "$colors" ]]; then
+    printf '%s\n' "$colors" >"$s/radiojoy-border"
+    list=$(printf '"%s", ' $colors)
+    g="{ colors = { ${list%, } }, angle = 45 }"
+    hyprctl eval "hl.config({ general = { col = { active_border = $g } }, group = { col = { border_active = $g } } })" >/dev/null 2>&1
+  fi
+else
+  rm -f "$s/radiojoy-border"
+fi
+
+# Spotify (with Spicetify): the radiojoy-follow extension polls my-colors.json.
+if command -v spicetify >/dev/null; then
+  xpui="$(spicetify config spotify_path 2>/dev/null)Apps/xpui"
+  if [[ -d $xpui && -w $xpui ]]; then
+    pairs=
+    if [[ $active && -n $who && -f $t/spotify ]]; then
+      pairs=$(awk -v sec="[$who]" '/^\[/{on = ($0 == sec); next} on && /=/{split($0, kv, "="); printf "%s\"%s\":\"%s\"", (n++ ? "," : ""), kv[1], kv[2]}' "$t/spotify")
+    fi
+    printf '{"who":"%s","colors":{%s}}\n' "$who" "$pairs" >"$xpui/radiojoy-colors.json.tmp" &&
+      mv "$xpui/radiojoy-colors.json.tmp" "$xpui/radiojoy-colors.json"
+  fi
+fi
+
+# Terminals still at their first prompt redraw their splash.
+[[ $active ]] && "$(dirname "$(readlink -f "$0")")/radiojoy-splash-refresh"
+exit 0

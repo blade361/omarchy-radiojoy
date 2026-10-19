@@ -1,0 +1,9 @@
+[Unit]
+Description=Radiojoy: follow the wallpaper
+
+[Path]
+# watch the directory: the background symlink is replaced, which a file watch misses
+PathChanged=%h/.local/state/omarchy/current
+
+[Install]
+WantedBy=default.target

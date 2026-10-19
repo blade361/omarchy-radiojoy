@@ -1,0 +1,40 @@
+#!/bin/bash
+# Redraws the whole splash in terminals that are still at their first prompt when the
+# wallpaper changes, or when they were resized since. radiojoy-splash records them in
+# $XDG_RUNTIME_DIR/radiojoy-splash/<pts>; the .bashrc block deletes that record once
+# the terminal is used, so busy terminals are never written to.
+# Written in bash on purpose: fastfetch finds the terminal by walking up past shells,
+# and with only shells between it and systemd it falls back to $TERM.
+bin=$(dirname "$(readlink -f "$0")")
+dir=${XDG_RUNTIME_DIR:-/tmp}/radiojoy-splash
+[[ -d $dir ]] || exit 0
+# the redraw has to put the prompt back, which needs starship (Omarchy's default prompt)
+command -v starship >/dev/null || exit 0
+splash=$HOME/.local/state/omarchy/current/theme/splash
+case $(readlink -f "$HOME/.local/state/omarchy/current/background") in
+  *-alastor.*) art=$splash/art-alastor.png ;;
+  *-emily.*) art=$splash/art-emily.png ;;
+  *) art=$splash/art.png ;;
+esac
+[[ -f $art ]] || art=$splash/art.png
+
+for rec in "$dir"/*; do
+  [[ -f $rec ]] || continue
+  unset pid tty term size
+  while IFS='=' read -r k v; do
+    case $k in pid) pid=$v ;; tty) tty=$v ;; term) term=$v ;; size) size=$v ;; art) was=$v ;; esac
+  done <"$rec"
+  # the shell that drew it must still own that terminal
+  if [[ -z $pid || $(readlink "/proc/$pid/fd/0" 2>/dev/null) != "$tty" ]]; then
+    rm -f "$rec"
+    continue
+  fi
+  now=$(stty -F "$tty" size 2>/dev/null) || { rm -f "$rec"; continue; }
+  [[ $was == "$art" && $size == "$now" ]] && continue
+  rm -f "$rec"  # radiojoy-splash writes a fresh record if the new splash fits
+  cwd=$(readlink "/proc/$pid/cwd")
+  TERM=${term:-xterm-256color} RADIOJOY_PID=$pid "$bin/radiojoy-splash" --into "$tty" 2>/dev/null
+  # put the prompt back where the shell expects to be typing
+  { printf '\n'; (cd "$cwd" && env -u STARSHIP_SHELL starship prompt --terminal-width="${now#* }" --status=0 --jobs=0); } >"$tty"
+done
+exit 0

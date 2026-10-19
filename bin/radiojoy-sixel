@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+# Prepares sixel frames of a splash image sized to the terminal's cell grid.
+# Usage: my-sixel-splash <art.png> <rows> [--probe] [--box COLS] [--tty PATH]
+# Prints "<cols> <rows> <frame-dir>"; the frame dir holds 00.six (clear picture)
+# and 01.six.. (radio static tuning in to the picture), cached per size.
+# --probe only prints the size, without building frames.
+# --box fits the art into exactly COLS columns (centered, shrunk if too wide), so
+# it can replace art of another width in place. --tty measures that terminal
+# instead of our own (radiojoy-splash-refresh draws into other terminals).
+import fcntl, hashlib, os, struct, subprocess, sys, termios
+from pathlib import Path
+import numpy as np
+from PIL import Image
+
+art_path, rows = Path(sys.argv[1]), int(sys.argv[2])
+opt = lambda name: sys.argv[sys.argv.index(name) + 1] if name in sys.argv else None
+box = int(opt("--box")) if opt("--box") else None
+with open(opt("--tty") or "/dev/tty") as tty:
+    r, c, xp, yp = struct.unpack("HHHH", fcntl.ioctl(tty, termios.TIOCGWINSZ, b"\0" * 8))
+if not (xp and yp):
+    sys.exit(1)
+cw, ch = xp / c, yp / r
+
+with Image.open(art_path) as im:
+    aw, ah = im.size
+h = int(rows * ch)
+w = int(aw * h / ah)
+cols = -(-w // int(cw))
+if box:
+    cols, w = box, int(box * cw)
+    # art size inside the box: full height unless that makes it too wide
+    ih = min(h, int(ah * w / aw))
+    iw = int(aw * ih / ah)
+
+key = hashlib.sha1(f"{art_path.resolve()}{art_path.stat().st_mtime}{w}x{h}{box}".encode()).hexdigest()[:12]
+out = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "radiojoy-sixel" / key
+if "--probe" not in sys.argv and not (out / "00.six").exists():
+    out.mkdir(parents=True, exist_ok=True)
+    art = Image.open(art_path).convert("RGBA")
+    if box:
+        canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        canvas.alpha_composite(art.resize((iw, ih), Image.LANCZOS), ((w - iw) // 2, h - ih))
+        art = canvas
+    else:
+        art = art.resize((w, h), Image.LANCZOS)
+    base = np.array(art)
+    # sixel transparency is on/off, so harden the edge
+    solid = base[..., 3] > 110
+    base[..., 3] = np.where(solid, 255, 0)
+    static = np.array([(220, 34, 73), (236, 233, 247), (125, 130, 188), (43, 26, 29), (157, 153, 188)], np.uint8)
+    steps, block = 12, max(2, int(cw / 2))
+    bh, bw = -(-h // block), -(-w // block)
+    frames = [base]
+    for i in range(1, steps + 1):
+        noise = (1 - (i - 1) / steps) ** 1.6 * 0.9
+        rng = np.random.default_rng(i)
+        f = base.copy()
+        # tuning jitter: some bands of rows slide sideways
+        for by in np.nonzero(rng.random(bh) < noise * 0.4)[0]:
+            y0, y1 = by * block, min(h, (by + 1) * block)
+            band = np.roll(base[y0:y1], int(rng.choice((-3, -2, 2, 3))) * block, axis=1)
+            keep = solid[y0:y1] & (band[..., 3] > 0)
+            f[y0:y1][keep] = band[keep]
+        # static: blocks of the palette over the figures only
+        hit = np.kron(rng.random((bh, bw)) < noise, np.ones((block, block), bool))[:h, :w] & solid
+        pick = np.kron(rng.integers(0, len(static), (bh, bw)), np.ones((block, block), int))[:h, :w]
+        f[hit, :3] = static[pick[hit]]
+        frames.append(f)
+    for i, f in enumerate(frames):
+        tmp = out / f"{i:02d}.png"
+        Image.fromarray(f).save(tmp)
+        subprocess.run(["magick", str(tmp), "sixel:" + str(out / f"{i:02d}.six")], check=True)
+        tmp.unlink()
+print(cols, rows, out)

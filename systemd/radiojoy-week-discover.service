@@ -1,0 +1,7 @@
+[Unit]
+Description=Radiojoy Week: look for an upcoming week
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/radiojoy-week --discover

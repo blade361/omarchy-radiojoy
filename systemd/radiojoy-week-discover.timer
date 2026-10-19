@@ -1,0 +1,10 @@
+[Unit]
+Description=Radiojoy Week: look for an upcoming week once a week
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

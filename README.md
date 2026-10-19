@@ -32,6 +32,12 @@ Radiojoy one gives you both.
   when it changes; after the week it's removed. List the artists in
   `~/.config/omarchy/themes/radiojoy/radiojoy-week-artists.txt` (Bluesky or Tumblr
   accounts, only ones you've checked draw by hand); with none, it shows just the prompts.
+  When the week is over the collage stays in the wallpaper carousel as a keepsake
+  ("Radiojoy Week 2026"), with all of the week's art.
+- **Next year's week:** once a week it looks for an upcoming Radiojoy Week (your listed
+  artists' posts and DeviantArt), reads the dates and prompts off the announcement
+  banner (OCR), adds them to `radiojoy-week.txt` and sends you a notification to check
+  them, since OCR can misread a word.
 - **Terminal splash:** the art is drawn as a real image beside fastfetch and "tunes in"
   through radio static, with a quote and a little status line under it. Terminals you haven't typed in yet redraw when the wallpaper changes.
 - **Lock screen:** every time you lock, the background steps to the next wallpaper in the order.
@@ -53,7 +59,7 @@ cd omarchy-radiojoy
 ```
 
 The installer copies the theme, scripts, bar button and a small background service,
-adds python-pillow and python-numpy if missing, and switches to the theme.
+adds python-pillow, python-numpy and tesseract (OCR) if missing, and switches to the theme.
 
 | Option | |
 |---|---|

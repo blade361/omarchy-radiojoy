@@ -8,8 +8,8 @@ if [[ -f $HOME/.local/state/omarchy/current/theme/radiojoy ]]; then
   exit 1
 fi
 
-systemctl --user disable --now radiojoy-sync.path radiojoy-week.timer >/dev/null 2>&1
-rm -f "$HOME"/.config/systemd/user/radiojoy-sync.{path,service} "$HOME"/.config/systemd/user/radiojoy-week.{timer,service}
+systemctl --user disable --now radiojoy-sync.path radiojoy-week.timer radiojoy-week-discover.timer >/dev/null 2>&1
+rm -f "$HOME"/.config/systemd/user/radiojoy-sync.{path,service} "$HOME"/.config/systemd/user/radiojoy-week{,-discover}.{timer,service}
 rm -f "$HOME"/.config/omarchy/backgrounds/radiojoy/radiojoy-week-*.png
 systemctl --user daemon-reload
 

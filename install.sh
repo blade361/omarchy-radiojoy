@@ -27,6 +27,7 @@ if [[ $session ]]; then
   missing=()
   python3 -c 'import PIL' 2>/dev/null || missing+=(python-pillow)
   python3 -c 'import numpy' 2>/dev/null || missing+=(python-numpy)
+  command -v tesseract >/dev/null || missing+=(tesseract tesseract-data-eng)
   if (( ${#missing[@]} )); then
     say "Installing ${missing[*]} (draws the terminal art)"
     omarchy pkg add "${missing[@]}"
@@ -73,7 +74,7 @@ fi
 
 if [[ $session ]]; then
   systemctl --user daemon-reload
-  systemctl --user enable --now radiojoy-sync.path radiojoy-week.timer >/dev/null
+  systemctl --user enable --now radiojoy-sync.path radiojoy-week.timer radiojoy-week-discover.timer >/dev/null
   omarchy bar put radiojoy.button >/dev/null 2>&1 || warn "Couldn't add the bar button; add 'radiojoy.button' from the bar settings"
 fi
 

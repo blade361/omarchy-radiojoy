@@ -3,8 +3,12 @@
 # builds a collage of only that week's art (fetched from the artists in
 # radiojoy-week-artists.txt as they post it) with the prompt list beside it, past
 # days crossed out. Whenever the collage changes (a new day or new art) it becomes
-# the wallpaper. After the week it's removed and the normal wallpapers return.
-# Run hourly by radiojoy-week.timer.
+# the wallpaper. When the week is over it becomes a keepsake collage of all the
+# week's art that stays in the wallpaper carousel (late posts are still added for
+# a few days). Run hourly by radiojoy-week.timer.
+#   --discover  look for an upcoming Radiojoy Week (radiojoy-week-discover.timer):
+#               reads announcement banners with OCR, adds the dates and prompts to
+#               radiojoy-week.txt and sends a notification to check them.
 import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.parse, urllib.request
 from pathlib import Path
 
@@ -23,6 +27,14 @@ def log(*a):
 
 def week_days(today):
     """[(date, prompt)] for the week containing today, or []."""
+    for w in all_weeks():
+        if w[0][0] <= today <= w[-1][0]:
+            return w
+    return []
+
+
+def all_weeks():
+    """Every week in radiojoy-week.txt, oldest first, as [(date, prompt)] lists."""
     f = THEME / "radiojoy-week.txt"
     rows = []
     for line in f.read_text().splitlines() if f.exists() else []:
@@ -39,17 +51,14 @@ def week_days(today):
         cur.append((d, p))
     if cur:
         weeks.append(cur)
-    for w in weeks:
-        if w[0][0] <= today <= w[-1][0]:
-            return w
-    return []
+    return weeks
 
 
 # Feeds and images come from posts, which could otherwise point at file:// paths
 # or machines on the local network: only https to these hosts, checked for every
 # redirect before it is followed.
-FEED_HOSTS = ("public.api.bsky.app", "tumblr.com")      # <blog>.tumblr.com/api/read
-IMAGE_HOSTS = ("cdn.bsky.app", "media.tumblr.com")       # 64.media.tumblr.com etc.
+FEED_HOSTS = ("public.api.bsky.app", "tumblr.com", "backend.deviantart.com")
+IMAGE_HOSTS = ("cdn.bsky.app", "media.tumblr.com", "wixmp.com")  # Bluesky, Tumblr, DeviantArt CDNs
 MAX_BYTES = 25 * 1024 * 1024
 
 
@@ -201,7 +210,7 @@ def drop_shared(pieces):
     return [p for p in pieces if p["hash"] is not None and len(hashes[p["hash"]]) == 1]
 
 
-def build(week, today, pieces, out):
+def build(week, today, pieces, out, final=False):
     from PIL import Image, ImageDraw, ImageFilter, ImageFont
     W, H = 1920, 1080
     font = lambda name, size: ImageFont.truetype(str(FONTS / name), size)
@@ -233,7 +242,9 @@ def build(week, today, pieces, out):
     y = top + 120
     for i, (day, prompt) in enumerate(week, 1):
         label, rest = (prompt.split(":", 1) + [""])[:2]
-        if day < today:
+        if final:
+            col, mark = (236, 233, 247), CHECK
+        elif day < today:
             col, mark = (157, 153, 188), CHECK
         elif day == today:
             col, mark = (242, 193, 78), PLAY
@@ -246,11 +257,12 @@ def build(week, today, pieces, out):
         d.text((60, y + 4), mark, font=icon(22), fill=col)
         d.text((92, y), label.strip(), font=day_f, fill=col)
         d.text((92, y + 32), rest.strip(), font=prompt_f, fill=col)
-        if day < today:  # done: crossed out
+        if day < today and not final:  # done: crossed out
             for yy, text, f in ((y + 17, label.strip(), day_f), (y + 47, rest.strip(), prompt_f)):
                 d.line((88, yy, 92 + d.textlength(text, font=f) + 4, yy), fill=(220, 34, 73), width=3)
         y += 108
-    d.text((60, H - 70), f"{len(pieces)} piece{'s' if len(pieces) != 1 else ''} so far · art by the artists, credited on each",
+    d.text((60, H - 70), f"{len(pieces)} piece{'s' if len(pieces) != 1 else ''}"
+           + (" · thank you, artists!" if final else " so far · art by the artists, credited on each"),
            font=small_f, fill=(200, 196, 220))
 
     # the art, newest day last, in the biggest grid that fits
@@ -297,31 +309,196 @@ def set_wallpaper(path):
     subprocess.run(["omarchy-theme-bg-set", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+GRACE_DAYS = 3  # late posts still join the keepsake collage this long after the week
+
+
+def notify(title, body):
+    subprocess.run(["notify-send", "-a", "Radiojoy", title, body],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def load_state():
+    f = CACHE / "state.json"
+    return json.loads(f.read_text()) if f.exists() else {}
+
+
+def save_state(state):
+    CACHE.mkdir(parents=True, exist_ok=True)
+    (CACHE / "state.json").write_text(json.dumps(state, indent=1))
+
+
 def main():
     if not (THEME / "radiojoy").exists():
         return
+    if "--discover" in sys.argv:
+        return discover()
     today = dt.date.today()
+    state = load_state()
+    force = "--force" in sys.argv
+
+    # finished weeks: keep a collage of all their art in the carousel
+    for w in all_weeks():
+        end, year = w[-1][0], str(w[0][0].year)
+        if not end < today <= end + dt.timedelta(days=GRACE_DAYS) and not (force and end < today):
+            continue
+        out = OUT_DIR / f"radiojoy-week-{year}.png"
+        pieces = collect(w)
+        sig = hashlib.sha1(json.dumps(["final"] + sorted(p["key"] for p in pieces)).encode()).hexdigest()
+        if state.get(f"final-{year}") != sig or not out.exists() or force:
+            build(w, today, pieces, out, final=True)
+            state[f"final-{year}"] = sig
+            save_state(state)
+
     week = week_days(today)
-    current = os.path.realpath(BG_LINK)
-    old = sorted(OUT_DIR.glob("radiojoy-week-*.png"))
     if not week:
-        for f in old:  # the week is over: back to the normal wallpapers
-            f.unlink()
-        if any(current == str(f.resolve()) for f in old) or (old and not Path(current).exists()):
-            first = sorted((THEME / "backgrounds").glob("*"))
-            if first:
-                set_wallpaper(first[0])
         return
     out = OUT_DIR / f"radiojoy-week-{week[0][0].year}.png"
     pieces = collect(week)
     sig = hashlib.sha1(json.dumps([str(today)] + sorted(p["key"] for p in pieces)).encode()).hexdigest()
-    state = CACHE / "state.json"
-    last = json.loads(state.read_text()).get("sig") if state.exists() else None
-    if sig == last and out.exists() and "--force" not in sys.argv:
+    if sig == state.get("sig") and out.exists() and not force:
         return
     build(week, today, pieces, out)
-    state.write_text(json.dumps({"sig": sig}))
+    state["sig"] = sig
+    save_state(state)
     set_wallpaper(out)  # a new day or new art: show it
+
+
+# --- discovering the next Radiojoy Week ------------------------------------
+
+MONTHS = "january february march april may june july august september october november december".split()
+NUMBERS = {w: i for i, w in enumerate("one two three four five six seven".split(), 1)}
+
+
+def parse_announcement(text):
+    """Dates and prompts from an announcement (post text or OCR of its banner).
+    Returns (first_date, [prompt, ...]) or None; prompts may be [] if unreadable."""
+    t = re.sub(r"[ \t]+", " ", text)
+    month = r"(" + "|".join(m[:3] for m in MONTHS) + r")[a-z]*\.?"
+    m = re.search(month + r" (\d{1,2})(?:st|nd|rd|th)? ?[-–—~to ]+ ?(?:" + month
+                  + r" )?(\d{1,2})(?:st|nd|rd|th)?,? ?(20\d\d)", t, re.I)
+    if not m:
+        return None
+    start = dt.date(int(m[5]), [x[:3] for x in MONTHS].index(m[1].lower()) + 1, int(m[2]))
+    prompts, last = {}, None
+    for line in t.splitlines():
+        line = line.strip()
+        dm = re.match(r"^\W*(?:\S{0,4}\s)?(one|two|three|four|five|six|seven|[1-7])\s*[:;.]\s*(.+)$", line, re.I)
+        if dm and dm[2].strip():
+            n = int(dm[1]) if dm[1].isdigit() else NUMBERS[dm[1].lower()]
+            prompts[n] = dm[2].strip()
+            last = n
+        elif last and line and (prompts[last].endswith("/") or line[:1].islower() or line.lower().startswith("and ")):
+            prompts[last] += " " + line  # a prompt wrapped onto the next line
+    days = [prompts.get(i, f"Day {i}") for i in range(1, 8)] if len(prompts) >= 4 else []
+    return start, [f"Day {i}: {p.split(':', 1)[-1].strip() if p.startswith('Day') else p}" for i, p in enumerate(days, 1)]
+
+
+def ocr(data):
+    import shutil, tempfile
+    if not shutil.which("tesseract"):
+        return ""
+    from PIL import Image, ImageOps
+    import io
+    try:
+        im = Image.open(io.BytesIO(data)).convert("L")
+    except Exception:
+        return ""
+    im = ImageOps.autocontrast(im.resize((im.width * 2, im.height * 2)))
+    with tempfile.NamedTemporaryFile(suffix=".png") as f:
+        im.save(f.name)
+        return subprocess.run(["tesseract", f.name, "-"], capture_output=True, text=True).stdout
+
+
+def announcements():
+    """(text, [image urls], link) for recent posts that mention a Radiojoy Week."""
+    artists = THEME / "radiojoy-week-artists.txt"
+    for line in artists.read_text().splitlines() if artists.exists() else []:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        kind, account = line.split()[:2]
+        try:
+            if kind == "bluesky":
+                feed = json.loads(get("https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed"
+                                      f"?actor={account}&limit=60"))
+                for item in feed.get("feed", []):
+                    p = item["post"]
+                    emb = p.get("embed", {})
+                    imgs = emb.get("images") or (emb.get("media") or {}).get("images") or []
+                    yield (p["record"].get("text", ""), [i["fullsize"] for i in imgs],
+                           f"https://bsky.app/profile/{p['author']['handle']}/post/{p['uri'].rsplit('/', 1)[-1]}")
+            else:
+                raw = get(f"https://{account}.tumblr.com/api/read/json?num=50")
+                for p in json.loads(raw[raw.index("{"):raw.rindex("}") + 1]).get("posts", []):
+                    body = p.get("regular-body", "") + p.get("photo-caption", "")
+                    text = html.unescape(re.sub(r"<[^>]+>", " ", body)) + " " + " ".join(p.get("tags", []))
+                    imgs = [re.search(r'src="([^"]+)"', t)[1] for t in re.findall(r"<img[^>]+>", body)]
+                    imgs += [ph["photo-url-1280"] for ph in p.get("photos", [])]
+                    yield text, imgs, p.get("url-with-slug") or p.get("url")
+        except Exception as e:
+            log(f"{account}: {e!r}")
+    try:  # DeviantArt's public search feed reaches beyond the listed artists
+        rss = get("https://backend.deviantart.com/rss.xml?type=deviation&q=radiojoy+week")
+        for item in re.findall(r"<item>(.*?)</item>", rss, re.S):
+            title = html.unescape(re.search(r"<title>(.*?)</title>", item, re.S)[1])
+            desc = html.unescape((re.search(r"<description>(.*?)</description>", item, re.S) or [None, ""])[1])
+            img = re.search(r'<media:content url="([^"]+)"', item)
+            link = re.search(r"<link>(.*?)</link>", item)[1]
+            yield title + "\n" + re.sub(r"<[^>]+>", " ", desc), [html.unescape(img[1])] if img else [], link
+    except Exception as e:
+        log(f"deviantart: {e!r}")
+
+
+def discover():
+    today = dt.date.today()
+    known = {w[0][0].year for w in all_weeks()}
+    state = load_state()
+    seen = set(state.get("discover-seen", []))
+    found = {}
+    for text, imgs, link in announcements():
+        if not re.search(r"radio\s*joy\s*week", text, re.I):
+            continue
+        hit = parse_announcement(text)
+        if not (hit and hit[1]):
+            for url in imgs[:2]:  # the dates and prompts are usually on the banner
+                try:
+                    data = get(url, binary=True)
+                except Exception as e:
+                    log(f"{url}: {e!r}")
+                    continue
+                img_hit = parse_announcement(ocr(data))
+                if img_hit and (not hit or img_hit[1]):
+                    hit = img_hit
+                if hit and hit[1]:
+                    break
+        if not hit or hit[0] < today or hit[0].year in known:
+            continue
+        found.setdefault(hit[0], (hit[1], link))
+        if hit[1]:
+            found[hit[0]] = (hit[1], link)
+
+    for start, (prompts, link) in sorted(found.items()):
+        # announced-without-prompts is remembered separately, so the prompts are
+        # still picked up when they're posted later
+        key = f"{start}" if prompts else f"{start}?"
+        if key in seen:
+            continue
+        seen.add(key)
+        if prompts:
+            lines = [f"{start + dt.timedelta(days=i)}\t{p}" for i, p in enumerate(prompts)]
+            for theme_dir in (HOME / ".config/omarchy/themes/radiojoy", THEME):
+                f = theme_dir / "radiojoy-week.txt"
+                if f.exists():
+                    with f.open("a") as fh:
+                        fh.write(f"# found {today} by radiojoy-week --discover ({link}); check the prompts\n")
+                        fh.write("\n".join(lines) + "\n")
+            notify(f"\uf005 Radiojoy Week {start.year} is coming!",
+                   f"{start:%B %-d}–{start + dt.timedelta(days=len(prompts) - 1):%-d}. The prompts were read from the "
+                   f"announcement, please check them in radiojoy-week.txt:\n" + "\n".join(prompts) + f"\n{link}")
+        else:
+            notify(f"\uf005 Radiojoy Week {start.year} announced",
+                   f"Starts {start:%B %-d}, but I couldn't read the prompts. Add them to radiojoy-week.txt:\n{link}")
+    state["discover-seen"] = sorted(seen)
+    save_state(state)
 
 
 if __name__ == "__main__":

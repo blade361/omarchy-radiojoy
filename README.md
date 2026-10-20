@@ -38,12 +38,17 @@ Radiojoy one gives you both.
   are listed already. With none, it shows just the prompts.
   When the week is over the collage stays in the wallpaper carousel as a keepsake
   ("Radiojoy Week 2026"), with all of the week's art.
-- **Next year's week:** once a week it looks for an upcoming Radiojoy Week, reading the
+- **Next year's week:** once a day it looks for an upcoming Radiojoy Week, reading the
   dates and prompts off the announcement banner (OCR). Where it looks: the Bluesky and
-  Tumblr accounts in `radiojoy-week-artists.txt`, and DeviantArt's public search. Weeks
-  found in your listed artists' posts are added to `radiojoy-week.txt` (with a
-  notification to check the prompts, since OCR can misread a word); DeviantArt finds,
-  which anyone can post, are only suggested: `radiojoy-week --accept YYYY-MM-DD` adds one.
+  Tumblr accounts in `radiojoy-week-artists.txt`, DeviantArt's public search and
+  Bluesky's public search. Weeks found in your listed artists' posts are added to
+  `radiojoy-week.txt` (with a notification to check the prompts, since OCR can misread a
+  word); search finds, which anyone can post, are only suggested:
+  `radiojoy-week --accept YYYY-MM-DD` adds one.
+- **New week artists:** during the week it also searches Bluesky for accounts posting
+  week art that aren't listed yet (skipping fic posts and posts labelled NSFW) and
+  sends a notification with links. Check that they draw by hand, then
+  `radiojoy-week --add-artist HANDLE` adds them to the collage.
 - **Terminal splash:** the art is drawn as a real image beside fastfetch and "tunes in"
   through radio static, with a quote and a little status line under it. Terminals you haven't typed in yet redraw when the wallpaper changes.
 - **Lock screen:** every time you lock, the background steps to the next wallpaper in the order.

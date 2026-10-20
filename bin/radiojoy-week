@@ -9,8 +9,11 @@
 #   --discover  look for an upcoming Radiojoy Week (radiojoy-week-discover.timer):
 #               reads announcement banners with OCR, adds the dates and prompts to
 #               radiojoy-week.txt and sends a notification to check them. Only the
-#               listed artists' posts are added like that; DeviantArt finds (anyone
-#               can post) become suggestions: radiojoy-week --accept YYYY-MM-DD
+#               listed artists' posts are added like that; DeviantArt and Bluesky
+#               search finds (anyone can post) become suggestions:
+#               radiojoy-week --accept YYYY-MM-DD
+#               During a week it also suggests Bluesky accounts posting week art
+#               that aren't listed yet: radiojoy-week --add-artist HANDLE
 import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.parse, urllib.request
 from pathlib import Path
 
@@ -68,7 +71,8 @@ def all_weeks():
 # Feeds and images come from posts, which could otherwise point at file:// paths
 # or machines on the local network: only https to these hosts, checked for every
 # redirect before it is followed.
-FEED_HOSTS = ("public.api.bsky.app", "tumblr.com", "backend.deviantart.com")
+FEED_HOSTS = ("api.bsky.app",  # also public.api.bsky.app
+              "tumblr.com", "backend.deviantart.com")
 IMAGE_HOSTS = ("cdn.bsky.app", "media.tumblr.com", "wixmp.com")  # Bluesky, Tumblr, DeviantArt CDNs
 MAX_BYTES = 25 * 1024 * 1024
 
@@ -355,6 +359,8 @@ def main():
         return discover()
     if "--accept" in sys.argv:
         return accept(sys.argv[sys.argv.index("--accept") + 1])
+    if "--add-artist" in sys.argv:
+        return add_artist(sys.argv[sys.argv.index("--add-artist") + 1])
     today = dt.date.today()
     state = load_state()
     force = "--force" in sys.argv
@@ -444,6 +450,56 @@ def ocr(data):
             return ""
 
 
+NSFW_LABELS = {"porn", "sexual", "nudity", "graphic-media", "gore"}
+
+
+def bluesky_search(queries, since):
+    """Posts from Bluesky's public search for any of the queries, newest first, back
+    to `since` (a UTC datetime). Search is on api.bsky.app; public.api.bsky.app
+    answers it with 403."""
+    seen = set()
+    for q in queries:
+        cursor = None
+        for _ in range(5):  # pages of 100
+            params = {"q": q, "limit": 100, "sort": "latest", **({"cursor": cursor} if cursor else {})}
+            try:
+                res = json.loads(get("https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?"
+                                     + urllib.parse.urlencode(params)))
+            except Exception as e:
+                log(f"bluesky search {q!r}: {e!r}")
+                break
+            old = False
+            for p in res.get("posts", []):
+                created = p["record"].get("createdAt", "")
+                try:
+                    when = dt.datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if when < since:
+                    old = True
+                    continue
+                if p["uri"] not in seen:
+                    seen.add(p["uri"])
+                    yield p, when
+            cursor = res.get("cursor")
+            if old or not cursor:
+                break
+
+
+def week_queries(year):
+    return ["radiojoy week", "radiojoyweek", f"radiojoyweek{year}", f"radiojoyweek{year + 1}"]
+
+
+def post_images(p):
+    emb = p.get("embed", {})
+    return emb.get("images") or (emb.get("media") or {}).get("images") or []
+
+
+def is_nsfw(p):
+    labels = p.get("labels", []) + p["author"].get("labels", [])
+    return any(l.get("val") in NSFW_LABELS for l in labels)
+
+
 def announcements():
     """(text, [image urls], link, trusted) for recent posts that mention a Radiojoy Week.
     trusted: from an artist in radiojoy-week-artists.txt."""
@@ -487,6 +543,12 @@ def announcements():
             yield title + "\n" + re.sub(r"<[^>]+>", " ", desc), [html.unescape(img[1])] if img else [], link, False
     except Exception as e:
         log(f"deviantart: {e!r}")
+    # Bluesky's public search, same as DeviantArt: anyone can post, so suggestions only
+    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=60)
+    for p, _ in bluesky_search(week_queries(dt.date.today().year), since):
+        handle = p["author"]["handle"]
+        yield (p["record"].get("text", ""), [i["fullsize"] for i in post_images(p)],
+               f"https://bsky.app/profile/{handle}/post/{p['uri'].rsplit('/', 1)[-1]}", False)
 
 
 def clean(text, limit=80):
@@ -552,15 +614,85 @@ def discover():
                    "them in radiojoy-week.txt:\n" + "\n".join(prompts) + f"\n{link}")
         elif prompts:
             suggestions[str(start)] = {"prompts": prompts, "link": link}
+            site = "Bluesky" if "bsky.app" in link else "DeviantArt"
             notify(f"\uf005 Radiojoy Week {start.year}? (unconfirmed)",
-                   f"A DeviantArt post says {start:%B %-d}–{end:%-d}. If it's real, run:\n"
+                   f"A {site} post says {start:%B %-d}–{end:%-d}. If it's real, run:\n"
                    f"radiojoy-week --accept {start}\n{link}")
         else:
             notify(f"\uf005 Radiojoy Week {start.year} announced",
                    f"Starts {start:%B %-d}, but I couldn't read the prompts yet. I'll keep looking:\n{link}")
     state["discover-seen"] = sorted(seen)
     state["suggestions"] = suggestions
+    suggest_artists(today, state)
     save_state(state)
+
+
+def listed_accounts():
+    """Listed accounts, plus each one's bare name (termsandfeathers.bsky.social is
+    the termsandfeathers already listed from Tumblr)."""
+    f = THEME / "radiojoy-week-artists.txt"
+    names = {l.split()[1].lower() for l in (f.read_text().splitlines() if f.exists() else [])
+             if len(l.split()) >= 2 and not l.lstrip().startswith("#")}
+    return names | {n.split(".")[0] for n in names}
+
+
+FIC = re.compile(r"\b(fics?|fanfic|ao3|archiveofourown|one-?shot|chapter|words?)\b", re.I)
+
+
+def suggest_artists(today, state):
+    """During a week (and its grace days): Bluesky accounts posting week art that
+    aren't in radiojoy-week-artists.txt. Only suggested, since they still need
+    checking (hand-drawn, not a fic cover): radiojoy-week --add-artist HANDLE."""
+    week = next((w for w in all_weeks()
+                 if w[0][0] - dt.timedelta(days=1) <= today <= w[-1][0] + dt.timedelta(days=GRACE_DAYS)), None)
+    if not week:
+        return
+    listed = listed_accounts()
+    asked = set(state.get("artists-seen", []))
+    pending = state.get("artist-suggestions", {})
+    since = dt.datetime.combine(week[0][0] - dt.timedelta(days=1), dt.time(), dt.timezone.utc)
+    posts = [p for p, _ in bluesky_search(week_queries(week[0][0].year), since)
+             if "radiojoyweek" in re.sub(r"[\s#_]", "", p["record"].get("text", "").lower())]
+    # writers post a picture of the fic's summary: skip anyone who posted a fic this week
+    writers = {p["author"]["handle"].lower() for p in posts
+               if FIC.search(p["record"].get("text", ""))
+               or re.search(r"\b(writer|author)\b", p["author"].get("displayName", ""), re.I)}
+    new = {}
+    for p in posts:
+        handle = p["author"]["handle"].lower()
+        if (handle in listed or handle.split(".")[0] in listed or handle in asked or handle in new
+                or handle in writers or is_nsfw(p) or not post_images(p)):
+            continue
+        new[handle] = {"name": clean(p["author"].get("displayName") or handle, 40) or handle,
+                       "link": f"https://bsky.app/profile/{handle}/post/{p['uri'].rsplit('/', 1)[-1]}"}
+    if not new:
+        return
+    pending.update(new)
+    state["artist-suggestions"] = pending
+    state["artists-seen"] = sorted(asked | set(new))
+    notify(f"\uf005 {len(new)} more Radiojoy Week artist{'s' * (len(new) > 1)}?",
+           "Posting week art on Bluesky. Check they draw by hand, then add with "
+           "radiojoy-week --add-artist HANDLE:\n"
+           + "\n".join(f"{h} ({v['name']}) {v['link']}" for h, v in sorted(new.items())))
+    log("artist suggestions: " + ", ".join(sorted(new)))
+
+
+def add_artist(handle):
+    handle = handle.lstrip("@").lower()
+    if not re.fullmatch(r"[a-z0-9.-]+", handle):
+        sys.exit(f"not a Bluesky handle: {handle!r}")
+    if handle in listed_accounts():
+        sys.exit(f"{handle} is already listed")
+    state = load_state()
+    name = state.get("artist-suggestions", {}).pop(handle, {}).get("name") or handle.split(".")[0]
+    for theme_dir in (HOME / ".config/omarchy/themes/radiojoy", THEME):
+        f = theme_dir / "radiojoy-week-artists.txt"
+        if f.exists():
+            text = f.read_text()
+            f.write_text(text + ("" if text.endswith("\n") or not text else "\n") + f"bluesky {handle} {name}\n")
+    save_state(state)
+    print(f"Added {handle} ({name}). Their week art joins the collage on the next hourly run "
+          "(or now: radiojoy-week).")
 
 
 def accept(start):

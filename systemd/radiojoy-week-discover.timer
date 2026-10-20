@@ -1,8 +1,8 @@
 [Unit]
-Description=Radiojoy Week: look for an upcoming week once a week
+Description=Radiojoy Week: look for an upcoming week and new week artists daily
 
 [Timer]
-OnCalendar=weekly
+OnCalendar=daily
 Persistent=true
 RandomizedDelaySec=1h
 

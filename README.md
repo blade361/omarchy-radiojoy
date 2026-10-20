@@ -32,7 +32,8 @@ Radiojoy one gives you both.
   the week (the lock screen shows it too); the week's art only appears in the collage,
   not as separate wallpapers. An hourly timer
   adds new pieces as the artists post them and switches the wallpaper to the new collage
-  when it changes; after the week it's removed. List the artists in
+  when it changes; to check right away, left-click the radio button on the bar (it tells
+  you what's new, or that nothing is yet). After the week it's removed. List the artists in
   `~/.config/omarchy/themes/radiojoy/radiojoy-week-artists.txt` (Bluesky or Tumblr
   accounts, only ones you've checked draw by hand); RadioJoy Enjoyer and termsandfeathers
   are listed already. With none, it shows just the prompts.

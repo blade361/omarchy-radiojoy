@@ -14,6 +14,7 @@
 #               radiojoy-week --accept YYYY-MM-DD
 #               During a week it also suggests Bluesky accounts posting week art
 #               that aren't listed yet: radiojoy-week --add-artist HANDLE
+#   --update    check for new art now and say what changed (the bar button)
 import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.parse, urllib.request
 from pathlib import Path
 
@@ -361,6 +362,8 @@ def main():
         return accept(sys.argv[sys.argv.index("--accept") + 1])
     if "--add-artist" in sys.argv:
         return add_artist(sys.argv[sys.argv.index("--add-artist") + 1])
+    if "--update" in sys.argv:
+        return update()
     today = dt.date.today()
     state = load_state()
     force = "--force" in sys.argv
@@ -383,13 +386,46 @@ def main():
         return
     out = OUT_DIR / f"radiojoy-week-{week[0][0].year}.png"
     pieces = collect(week)
-    sig = hashlib.sha1(json.dumps([str(today)] + sorted(p["key"] for p in pieces)).encode()).hexdigest()
+    keys = sorted(p["key"] for p in pieces)
+    new = [p for p in pieces if p["key"] not in set(state.get("keys", keys))]
+    sig = hashlib.sha1(json.dumps([str(today)] + keys).encode()).hexdigest()
     if sig == state.get("sig") and out.exists() and not force:
-        return
+        state["keys"] = keys
+        save_state(state)
+        return {"pieces": pieces, "new": new, "built": False}
     build(week, today, pieces, out)
-    state["sig"] = sig
+    state["sig"], state["keys"] = sig, keys
     save_state(state)
     set_wallpaper(out)  # a new day or new art: show it
+    return {"pieces": pieces, "new": new, "built": True}
+
+
+def update():
+    """The bar button during the week: fetch now, rebuild if anything changed, and
+    say so. One at a time (the hourly timer may be running too)."""
+    import fcntl
+    CACHE.mkdir(parents=True, exist_ok=True)
+    with open(CACHE / "update.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return notify("\uf005 Radiojoy Week", "Already checking for new art…")
+        sys.argv = [a for a in sys.argv if a != "--update"]
+        if not week_days(dt.date.today()):
+            return notify("\uf005 Radiojoy Week", "It isn't Radiojoy Week right now.")
+        notify("\uf005 Radiojoy Week", "Checking for new art…")
+        res = main()
+        if res is None:
+            return
+        new, total = res["new"], len(res["pieces"])
+        if new:
+            who = ", ".join(sorted({p["artist"] for p in new}))
+            notify("\uf005 Collage updated",
+                   f"{len(new)} new piece{'s' * (len(new) > 1)} by {who} · {total} in all")
+        elif res["built"]:
+            notify("\uf005 Collage updated", f"New day, no new art yet · {total} pieces")
+        else:
+            notify("\uf005 Radiojoy Week", f"No new art yet · the collage has all {total} pieces")
 
 
 # --- discovering the next Radiojoy Week ------------------------------------

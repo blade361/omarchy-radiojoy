@@ -291,44 +291,86 @@ def build(week, today, pieces, out, final=False):
            + (" · thank you, artists!" if final else " so far · art by the artists, credited on each"),
            font=small_f, fill=(200, 196, 220))
 
-    # the art, newest day last, in the biggest grid that fits
+    # the art, scrambled, in justified rows (one height per row, every piece keeps its shape)
     ax0, ay0, ax1, ay1 = 580, top + 110, W - 40, H - 40
-    pieces = sorted(pieces, key=lambda p: (p["day"], p["artist"], p["key"]))
-    if not pieces:
+    images = []
+    for p in pieces:
+        try:
+            images.append((p, Image.open(p["path"]).convert("RGB")))
+        except Exception:
+            continue
+    if not images:
         d.text(((ax0 + ax1) // 2, (ay0 + ay1) // 2), "The art arrives here as the artists post it",
                font=prompt_f, fill=(236, 233, 247), anchor="mm")
     else:
-        n, aw, ah = len(pieces), ax1 - ax0, ay1 - ay0
-        best = None
-        for cols in range(1, n + 1):
-            rows = -(-n // cols)
-            cw, ch = aw / cols, ah / rows
-            if best is None or min(cw, ch * 0.8) > best[2]:
-                best = (cols, rows, min(cw, ch * 0.8))
-        cols, rows, _ = best
-        cw, ch = aw / cols, ah / rows
-        for i, p in enumerate(pieces):
-            cx, cy = ax0 + (i % cols) * cw, ay0 + (i // cols) * ch
-            try:
-                im = Image.open(p["path"]).convert("RGB")
-            except Exception:
-                continue
-            bw, bh = cw - 24, ch - 44
-            s = min(bw / im.width, bh / im.height)
-            im = im.resize((max(1, int(im.width * s)), max(1, int(im.height * s))), Image.LANCZOS)
-            x, yy = int(cx + (cw - im.width) / 2), int(cy + 8 + (bh - im.height) / 2)
-            glow = Image.new("RGBA", bg.size, (0, 0, 0, 0))
-            ImageDraw.Draw(glow).rectangle((x - 6, yy - 6, x + im.width + 6, yy + im.height + 6), fill=(242, 193, 78, 90))
-            bg.alpha_composite(glow.filter(ImageFilter.GaussianBlur(10)))
-            d = ImageDraw.Draw(bg)
-            d.rectangle((x - 3, yy - 3, x + im.width + 2, yy + im.height + 2), outline=(236, 233, 247), width=2)
-            bg.paste(im, (x, yy))
-            d.text((x + im.width / 2, yy + im.height + 18), f"Day {p['day']} · {p['artist']}",
-                   font=small_f, fill=(236, 233, 247), anchor="mm")
+        images = scramble(images)
+        gap, cap = 26, 34  # between pieces; room for the caption under each row
+        aw, ah = ax1 - ax0, ay1 - ay0
+        ratios = [im.width / im.height for _, im in images]
+
+        total = sum(ratios)
+
+        def rows_for(k):
+            """k rows of about equal total width, each scaled to the full width,
+            then all shrunk together if they're too tall; returns [(start, end, height)]."""
+            cuts, i = [0], 0
+            for t in range(1, k):
+                goal, acc = total * t / k, sum(ratios[:i])
+                while i < len(ratios) - (k - t) and abs(acc + ratios[i] - goal) < abs(acc - goal):
+                    acc += ratios[i]
+                    i += 1
+                i = max(i, cuts[-1] + 1)
+                cuts.append(i)
+            cuts.append(len(ratios))
+            rows = [(a, b, (aw - gap * (b - a - 1)) / sum(ratios[a:b])) for a, b in zip(cuts, cuts[1:])]
+            room = ah - (cap + gap) * k + gap
+            scale = min(1.0, room / sum(rh for _, _, rh in rows))
+            return [(a, b, rh * scale) for a, b, rh in rows]
+
+        def height(rows):
+            return sum(rh + cap for _, _, rh in rows) + gap * (len(rows) - 1)
+
+        # the row count that shows the art biggest
+        rows = max((rows_for(k) for k in range(1, len(ratios) + 1)),
+                   key=lambda rows: sum(rh * rh * sum(ratios[a:b]) for a, b, rh in rows))
+        y = ay0 + (ah - height(rows)) / 2
+        for i, j, rh in rows:
+            row_w = sum(ratios[i:j]) * rh + gap * (j - i - 1)
+            x = ax0 + (aw - row_w) / 2
+            for p, im in images[i:j]:
+                im = im.resize((max(1, round(im.width * rh / im.height)), max(1, round(rh))), Image.LANCZOS)
+                ix, iy = round(x), round(y)
+                glow = Image.new("RGBA", bg.size, (0, 0, 0, 0))
+                ImageDraw.Draw(glow).rectangle((ix - 6, iy - 6, ix + im.width + 6, iy + im.height + 6), fill=(242, 193, 78, 90))
+                bg.alpha_composite(glow.filter(ImageFilter.GaussianBlur(10)))
+                d = ImageDraw.Draw(bg)
+                d.rectangle((ix - 3, iy - 3, ix + im.width + 2, iy + im.height + 2), outline=(236, 233, 247), width=2)
+                bg.paste(im, (ix, iy))
+                d.text((ix + im.width / 2, iy + im.height + 18), p["artist"],
+                       font=small_f, fill=(236, 233, 247), anchor="mm")
+                x += im.width + gap
+            y += rh + cap + gap
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp.png")
     bg.convert("RGB").save(tmp)
     tmp.replace(out)
+
+
+def scramble(images):
+    """A mixed-up order that stays put between rebuilds (each piece's place comes
+    from a hash of its key, so new art drops in somewhere without reshuffling the
+    rest) and keeps an artist's pieces apart where it can."""
+    images = sorted(images, key=lambda pi: hashlib.sha1(pi[0]["key"].encode()).hexdigest())
+    out = []
+    while images:
+        last = out[-1][0]["artist"] if out else None
+        left = {}
+        for p, _ in images:
+            left[p["artist"]] = left.get(p["artist"], 0) + 1
+        # the artist with the most pieces still to place goes next, so none pile up at the end
+        pick = max((a for a in left if a != last), key=lambda a: left[a], default=last)
+        out.append(images.pop(next(k for k, (p, _) in enumerate(images) if p["artist"] == pick)))
+    return out
 
 
 def set_wallpaper(path):

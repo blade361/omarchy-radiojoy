@@ -15,6 +15,9 @@
 #               During a week it also suggests Bluesky accounts posting week art
 #               that aren't listed yet: radiojoy-week --add-artist HANDLE
 #   --update    check for new art now and say what changed (the bar button)
+#   --add FILE "ARTIST" DAY
+#               add a piece by hand (an artist shared it before posting it). When
+#               the artist posts it, the fetched copy replaces it: no duplicate.
 import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.parse, urllib.request
 from pathlib import Path
 
@@ -181,6 +184,51 @@ def fetch_tumblr(blog, week):
                    "link": p.get("url-with-slug") or p.get("url")}
 
 
+def image_hash(data):
+    """A 64-bit difference hash: survives the resizing and recompression a site
+    does on upload, so a hand-added piece is recognised when it's posted."""
+    import io
+    Image = pil()
+    try:
+        im = Image.open(io.BytesIO(data)).convert("L").resize((9, 8), Image.LANCZOS)
+    except Exception:
+        return None
+    px = list(im.tobytes())
+    return sum(1 << (r * 8 + c) for r in range(8) for c in range(8) if px[r * 9 + c] > px[r * 9 + c + 1])
+
+
+def same_image(a, b):
+    return a is not None and b is not None and bin(a ^ b).count("1") <= 10
+
+
+def add_piece(file, artist, day):
+    today = dt.date.today()
+    week = week_days(today) or next((w for w in reversed(all_weeks())
+                                     if w[-1][0] < today <= w[-1][0] + dt.timedelta(days=GRACE_DAYS)), None)
+    if not week:
+        sys.exit("it isn't Radiojoy Week (or just after it)")
+    if not day.isdigit() or not 1 <= int(day) <= len(week):
+        sys.exit(f"DAY must be 1-{len(week)}")
+    data = Path(file).read_bytes()
+    h = image_hash(data)
+    if h is None:
+        sys.exit(f"not an image: {file}")
+    year_dir = CACHE / str(week[0][0].year)
+    year_dir.mkdir(parents=True, exist_ok=True)
+    index_file = year_dir / "index.json"
+    index = json.loads(index_file.read_text()) if index_file.exists() else {}
+    for k, v in index.items():
+        if v["artist"] == artist and same_image(h, v.get("hash") or image_hash((year_dir / v["file"]).read_bytes())):
+            sys.exit(f"already in the collage ({k})")
+    key = "manual-" + hashlib.sha1(data).hexdigest()[:12]
+    (year_dir / (key + ".img")).write_bytes(data)
+    index[key] = {"file": key + ".img", "artist": artist, "day": int(day), "link": "", "hash": h}
+    index_file.write_text(json.dumps(index, indent=1))
+    print(f"Added day {day} by {artist}. If they post it, the posted copy replaces this one.")
+    sys.argv = sys.argv[:1] + ["--locked"]
+    main()
+
+
 def collect(week):
     """Download new week art into the cache; return the list of pieces."""
     year_dir = CACHE / str(week[0][0].year)
@@ -209,9 +257,14 @@ def collect(week):
             if not data.startswith((b"\xff\xd8", b"\x89PNG", b"GIF8", b"RIFF")):  # jpeg/png/gif/webp
                 log(f"{key}: not an image")
                 continue
+            artist, h = name or account, image_hash(data)
+            for k in [k for k, v in index.items()  # added by hand before it was posted
+                      if k.startswith("manual-") and v["artist"] == artist and same_image(h, v.get("hash"))]:
+                (year_dir / index.pop(k)["file"]).unlink(missing_ok=True)
+                log(f"{key} replaces {k}")
             path = year_dir / (hashlib.sha1(key.encode()).hexdigest()[:12] + ".img")
             path.write_bytes(data)
-            index[key] = {"file": path.name, "artist": name or account, "day": art["day"], "link": art["link"]}
+            index[key] = {"file": path.name, "artist": artist, "day": art["day"], "link": art["link"], "hash": h}
     index_file.write_text(json.dumps(index, indent=1))
     pieces = [dict(v, key=k, path=str(year_dir / v["file"])) for k, v in index.items()]
     return drop_shared(pieces)
@@ -400,6 +453,11 @@ def main():
         return
     if "--discover" in sys.argv:
         return discover()
+    if "--add" in sys.argv:
+        i = sys.argv.index("--add")
+        if len(sys.argv) < i + 4:
+            sys.exit('usage: radiojoy-week --add FILE "ARTIST" DAY')
+        return add_piece(sys.argv[i + 1], sys.argv[i + 2], sys.argv[i + 3])
     if "--accept" in sys.argv:
         return accept(sys.argv[sys.argv.index("--accept") + 1])
     if "--add-artist" in sys.argv:

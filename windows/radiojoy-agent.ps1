@@ -286,6 +286,13 @@ $tray = New-Object System.Windows.Forms.NotifyIcon
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $header = $menu.Items.Add('Radiojoy'); $header.Enabled = $false
 $weekItem = $menu.Items.Add(''); $weekItem.Enabled = $false
+# during the week: fetch the artists' new posts now (radiojoy-week.py --update)
+$checkItem = $menu.Items.Add('Check for new week art')
+$checkItem.add_Click({
+    if ($config.python -and (Test-Path $config.python)) {
+      Start-Process -FilePath $config.python -ArgumentList "`"$(Join-Path $RJ 'radiojoy-week.py')`" --update" -WindowStyle Hidden
+    }
+  })
 [void]$menu.Items.Add('-')
 $menu.Items.Add('Next wallpaper').add_Click({ Step-RJWallpaper })
 $menu.Items.Add('A quote').add_Click({ Show-RJQuote })
@@ -342,6 +349,7 @@ function Update-RJTray {
   $header.Text = if ($script:onAir) { "$name $([char]0xB7) on air" } else { $name }
   $weekItem.Text = $weekText
   $weekItem.Visible = [bool]$weekText
+  $checkItem.Visible = [bool]($week.Prompt -and $config.python)
 }
 
 # --- following the wallpaper ---------------------------------------------------------
@@ -425,7 +433,7 @@ function Invoke-RJWeek {
     Write-RJFile $seen $today
   }
   if (-not ($config.python -and (Test-Path $config.python))) { return }
-  $script = Join-Path $PSScriptRoot 'radiojoy-week.py'
+  $script = Join-Path $RJ 'radiojoy-week.py'
   $stamp = Join-Path $RJState 'week-run.txt'
   $last = 0L; [void][int64]::TryParse((Read-RJText $stamp).Trim(), [ref]$last)
   if ([DateTime]::UtcNow.Ticks - $last -gt [TimeSpan]::FromMinutes(59).Ticks) {

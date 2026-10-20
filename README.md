@@ -135,7 +135,7 @@ that isn't one of the theme's turns it all off, the way switching themes does on
 | **Terminal splash** | PowerShell profile: the art beside the system info ([fastfetch](https://github.com/fastfetch-cli/fastfetch) if installed), tuning in through static, quote and status line. Real images need Windows Terminal 1.22 or newer (sixel); older terminals get the text version |
 | **Terminal colours** | Windows Terminal schemes *Radiojoy*, *Radiojoy Alastor*, *Radiojoy Emily* and a *Radiojoy* profile; open terminals switch palette at their next prompt |
 | **Lock screen** | steps one wallpaper along the order on every lock, with the character art at the sides and the tagline |
-| **Tray icon** (the bar button) | the character's heads, a red dot while Spotify plays (on air); right-click for a quote and Radiojoy Week |
+| **Tray icon** (the bar button) | the character's heads, a red dot while Spotify plays (on air); right-click for a quote, Radiojoy Week and "check for new week art" |
 | **Spotify** | with [Spicetify](https://spicetify.app), live like on Linux (not the Microsoft Store Spotify, which Spicetify can't patch) |
 | **Zen / Firefox** | same `@import` line as below, in the profile under `%APPDATA%` |
 | **Sounds** | the login sound, and each character's notification sound |

@@ -1,6 +1,6 @@
 # 📻 Radiojoy for Omarchy 😇
 
-An [Omarchy](https://omarchy.org) theme for **Alastor × Emily** (Hazbin Hotel), where
+An [Omarchy](https://omarchy.org) theme for **Alastor × Emily** (Hazbin Hotel), [also for Windows](#windows-10--11), where
 the whole desktop follows the wallpaper. Put up an Alastor wallpaper and you get
 Alastor's colours, art and quotes everywhere; an Emily one gives you Emily's; a
 Radiojoy one gives you both.
@@ -114,6 +114,45 @@ The colours update with the wallpaper and apply the next time the browser starts
 omarchy theme set tokyo-night   # any other theme
 ./uninstall.sh
 ```
+
+## Windows 10 / 11
+
+Most of the theme also runs on Windows, from the `windows/` folder. Download the repo
+(**Code → Download ZIP**), unzip it and double-click **`windows\install.cmd`**. Nothing is
+installed system-wide and no admin rights are needed; it all lives in
+`%LOCALAPPDATA%\Radiojoy`. The Windows version is new: if something doesn't work, please
+[open an issue](https://github.com/blade361/omarchy-radiojoy/issues).
+
+The desktop still follows the wallpaper: a small background program (the 📻 tray icon,
+started at login) watches it and switches everything over. Putting up a wallpaper
+that isn't one of the theme's turns it all off, the way switching themes does on Omarchy.
+
+| | Windows |
+|---|---|
+| **Wallpapers** | all 57, same order; click the tray icon for the next one |
+| **Window borders & title bars** | Windows 11: the focused window's border runs through the character's gradient, title bars in their colours. Windows 10: accent-coloured title bars |
+| **Accent colour** | Start, taskbar and accent follow the wallpaper; dark mode on |
+| **Terminal splash** | PowerShell profile: the art beside the system info ([fastfetch](https://github.com/fastfetch-cli/fastfetch) if installed), tuning in through static, quote and status line. Real images need Windows Terminal 1.22 or newer (sixel); older terminals get the text version |
+| **Terminal colours** | Windows Terminal schemes *Radiojoy*, *Radiojoy Alastor*, *Radiojoy Emily* and a *Radiojoy* profile; open terminals switch palette at their next prompt |
+| **Lock screen** | steps one wallpaper along the order on every lock, with the character art at the sides and the tagline |
+| **Tray icon** (the bar button) | the character's heads, a red dot while Spotify plays (on air); right-click for a quote and Radiojoy Week |
+| **Spotify** | with [Spicetify](https://spicetify.app), live like on Linux (not the Microsoft Store Spotify, which Spicetify can't patch) |
+| **Zen / Firefox** | same `@import` line as below, in the profile under `%APPDATA%` |
+| **Sounds** | the login sound, and each character's notification sound |
+| **Radiojoy Week** | today's prompt in the tray and the splash. The collage wallpaper needs [Python](https://www.python.org) with Pillow (the installer offers to add Pillow); Tesseract OCR is optional, for finding next year's week |
+
+Not on Windows: the screensaver (Windows screensavers are programs), redrawing the
+splash in terminals you haven't typed in yet, the bar/menu colours, and the boot logo.
+
+Options for `install.ps1` (run it from PowerShell with
+`powershell -ExecutionPolicy Bypass -File windows\install.ps1 -NoSounds`, for example):
+`-NoSplash`, `-NoSpotify`, `-NoAccent`, `-NoBorders`, `-NoSounds`, `-NoWeek`, `-Yes`.
+The splash needs PowerShell to run your profile; if it isn't allowed to, the installer
+asks to set `RemoteSigned` for your user (the usual setting for this).
+
+To uninstall, run `%LOCALAPPDATA%\Radiojoy\uninstall.ps1` the same way. It puts back
+your wallpaper, colours, sound, profile and Spotify theme. If you used Windows
+Spotlight on the lock screen, turn it back on in Settings → Personalization → Lock screen.
 
 ## Fan art
 

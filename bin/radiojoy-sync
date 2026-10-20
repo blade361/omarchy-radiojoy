@@ -106,6 +106,43 @@ CSS
   fi
 done
 
+# btop and cava: the character's palette. btop's current.theme points at the theme's
+# btop.theme, so it's rewritten from Omarchy's template and running btops reload it
+# (SIGUSR2). cava reads ~/.config/cava/themes/radiojoy when its config says
+# theme = 'radiojoy' (the installer sets that) and reloads colours on SIGUSR2.
+if [[ $active && -f $t/shell/colors-${who:-radiojoy}.toml ]]; then
+  pal=$t/shell/colors-${who:-radiojoy}.toml
+  c() { sed -nE "s/^$1[[:space:]]*=[[:space:]]*\"(#[0-9a-fA-F]{6})\".*/\1/p" "$pal"; }
+  tpl=$HOME/.config/omarchy/themed/btop.theme.tpl
+  [[ -f $tpl ]] || tpl=${OMARCHY_PATH:-/usr/share/omarchy}/default/themed/btop.theme.tpl
+  if [[ -f $tpl ]]; then
+    subst=$(sed -nE 's/^([a-z_]+)[[:space:]]*=[[:space:]]*"([^"]*)".*/s|{{ \1 }}|\2|g;/p' "$pal")
+    new=$(sed -e "$subst" "$tpl")
+    if [[ $new != "$(cat "$t/btop.theme" 2>/dev/null)" ]]; then
+      printf '%s\n' "$new" >"$t/btop.theme"
+      for pid in $(pgrep -x btop); do
+        [[ $(readlink "/proc/$pid/exe") == */btop ]] && kill -USR2 "$pid" 2>/dev/null
+      done
+    fi
+  fi
+  mkdir -p "$HOME/.config/cava/themes"
+  new="# written by radiojoy-sync for the current wallpaper (bottom to top)
+[color]
+gradient = 1
+gradient_color_1 = '$(c blue)'
+gradient_color_2 = '$(c bright_blue)'
+gradient_color_3 = '$(c magenta)'
+gradient_color_4 = '$(c bright_magenta)'
+gradient_color_5 = '$(c accent)'
+gradient_color_6 = '$(c orange)'
+gradient_color_7 = '$(c yellow)'
+gradient_color_8 = '$(c bright_yellow)'"
+  if [[ $new != "$(cat "$HOME/.config/cava/themes/radiojoy" 2>/dev/null)" ]]; then
+    printf '%s\n' "$new" >"$HOME/.config/cava/themes/radiojoy"
+    pkill -USR2 -x cava 2>/dev/null
+  fi
+fi
+
 # Terminal colours: idle terminals switch palette now, new ones in the .bashrc block.
 if [[ $active ]]; then
   "$(dirname "$(readlink -f "$0")")/radiojoy-term-colors" --idle

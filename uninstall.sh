@@ -10,7 +10,7 @@ fi
 
 systemctl --user disable --now radiojoy-sync.path radiojoy-week.timer radiojoy-week-discover.timer >/dev/null 2>&1
 rm -f "$HOME"/.config/systemd/user/radiojoy-sync.{path,service} "$HOME"/.config/systemd/user/radiojoy-week{,-discover}.{timer,service}
-rm -f "$HOME"/.config/omarchy/backgrounds/radiojoy/radiojoy-week-*.png
+rm -rf "$HOME"/.config/omarchy/backgrounds/radiojoy/radiojoy-week-*.png "$HOME"/.config/omarchy/backgrounds/radiojoy/.week
 systemctl --user daemon-reload
 
 # reset terminal colours and Zen/Firefox colours while the scripts still exist
@@ -34,6 +34,11 @@ fi
 if command -v spicetify >/dev/null; then
   spicetify config extensions radiojoy-follow.js- >/dev/null 2>&1 && spicetify apply >/dev/null 2>&1
 fi
+
+if [[ -f $HOME/.config/cava/config ]]; then
+  sed -i "s/^theme = 'radiojoy'$/; theme = 'none'/" "$HOME/.config/cava/config"
+fi
+rm -f "$HOME/.config/cava/themes/radiojoy"
 
 rm -rf "$HOME/.config/omarchy/themes/radiojoy" "${XDG_CACHE_HOME:-$HOME/.cache}/radiojoy-sixel" "${XDG_CACHE_HOME:-$HOME/.cache}/radiojoy-week"
 rm -f "$HOME/.local/state/omarchy/radiojoy-border" "$HOME/.local/state/omarchy/radiojoy-lock-background" "$HOME/.local/state/omarchy/radiojoy-term-colors"

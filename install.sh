@@ -28,6 +28,7 @@ if [[ $session ]]; then
   python3 -c 'import PIL' 2>/dev/null || missing+=(python-pillow)
   python3 -c 'import numpy' 2>/dev/null || missing+=(python-numpy)
   command -v tesseract >/dev/null || missing+=(tesseract tesseract-data-eng)
+  command -v inotifywait >/dev/null || missing+=(inotify-tools)  # the bar button's watch
   if (( ${#missing[@]} )); then
     say "Installing ${missing[*]} (draws the terminal art)"
     omarchy pkg add "${missing[@]}"
@@ -61,6 +62,24 @@ cp -r "$repo/plugins/radiojoy.button" "$HOME/.config/omarchy/plugins/"
 say "Wallpaper watcher → ~/.config/systemd/user"
 mkdir -p "$HOME/.config/systemd/user"
 cp "$repo"/systemd/radiojoy-sync.* "$HOME/.config/systemd/user/"
+
+if command -v cava >/dev/null; then
+  cava_conf=$HOME/.config/cava/config
+  if [[ ! -f $cava_conf ]]; then
+    say "cava colours → ~/.config/cava/config"
+    mkdir -p "${cava_conf%/*}"
+    printf "[color]\ntheme = 'radiojoy'\n" >"$cava_conf"
+  elif grep -q "^theme = 'radiojoy'" "$cava_conf"; then
+    :
+  elif grep -qE "^[[:space:]]*theme[[:space:]]*=" "$cava_conf"; then
+    warn "cava already uses a theme; left it alone (theme = 'radiojoy' follows the wallpaper)"
+  elif grep -q "^; theme = 'none'" "$cava_conf"; then
+    say "cava colours → ~/.config/cava/config"
+    sed -i "s/^; theme = 'none'$/theme = 'radiojoy'/" "$cava_conf"
+  else
+    warn "Add theme = 'radiojoy' under [color] in ~/.config/cava/config for cava colours"
+  fi
+fi
 
 if [[ $splash ]]; then
   if grep -q '>>> omarchy-radiojoy >>>' "$HOME/.bashrc" 2>/dev/null; then

@@ -18,16 +18,20 @@ $oldEnc = [Console]::OutputEncoding
 [Console]::Write((Get-RJTermSequence $who))
 $global:RadiojoyWho = $who
 
+# No keyboard to read when input is redirected: KeyAvailable throws there.
+function Test-RJKey { try { [Console]::KeyAvailable } catch { $false } }
+
 function Get-RJVisibleWidth([string]$s) { ($s -replace "$e\[[0-9;]*[A-Za-z]", '').Length }
 
 # A terminal query: writes $Query, reads the reply up to $End (or gives up).
 function Read-RJReply([string]$Query, [char]$End, [int]$Ms = 300) {
-  try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { return '' }
+  if ([Console]::IsInputRedirected) { return '' }
+  while (Test-RJKey) { [void][Console]::ReadKey($true) }
   [Console]::Write($Query)
   $sb = New-Object System.Text.StringBuilder
   $sw = [Diagnostics.Stopwatch]::StartNew()
   while ($sw.ElapsedMilliseconds -lt $Ms) {
-    if ([Console]::KeyAvailable) {
+    if (Test-RJKey) {
       $c = [Console]::ReadKey($true).KeyChar
       [void]$sb.Append($c)
       if ($c -eq $End) { break }
@@ -97,7 +101,7 @@ function Show-RJFrames($frames) {
     for ($i = 1; $i -lt $frames.Count; $i++) {
       [Console]::Write("$e" + '8' + $frames[$i])
       Start-Sleep -Milliseconds 80
-      if ([Console]::KeyAvailable) { [void][Console]::ReadKey($true); $stop = $true; break }
+      if (Test-RJKey) { [void][Console]::ReadKey($true); $stop = $true; break }
     }
   }
   [Console]::Write("$e" + '8' + $frames[0] + "$e[?25h")

@@ -1,0 +1,124 @@
+name: Windows test
+on:
+  push:
+    branches: [windows-test]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: powershell   # Windows PowerShell 5.1, what normal users have
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse and compile with Windows PowerShell 5.1
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          [Environment]::OSVersion.Version.ToString()
+          $bad = 0
+          foreach ($f in Get-ChildItem windows\*.ps1) {
+            $t = $null; $e = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e)
+            foreach ($x in $e) { "$($f.Name):$($x.Extent.StartLineNumber): $($x.Message)"; $bad++ }
+          }
+          Add-Type -Path windows\RadiojoySixel.cs
+          Add-Type -Path windows\RadiojoyNative.cs
+          'C# compiles'
+          if ($bad) { exit 1 }
+
+      - name: Install with the one-line command
+        env:
+          RADIOJOY_BRANCH: windows-test
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          irm https://raw.githubusercontent.com/blade361/omarchy-radiojoy/windows-test/windows/get.ps1 | iex
+
+      - name: Check the install
+        run: |
+          $RJ = "$env:LOCALAPPDATA\Radiojoy"
+          Get-ChildItem $RJ | Format-Table Name, Length -AutoSize | Out-String
+          Get-Content $RJ\config.json
+          Get-ItemProperty 'HKCU:\Control Panel\Desktop' | Select-Object WallPaper, WallpaperStyle | Format-List | Out-String
+          Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Radiojoy | Select-Object DisplayName, UninstallString, EstimatedSize | Format-List | Out-String
+          Get-Content "$env:LOCALAPPDATA\Microsoft\Windows Terminal\Fragments\Radiojoy\radiojoy.json" -Raw | ConvertFrom-Json | Out-Null
+          'Windows Terminal fragment: valid JSON'
+          Get-ChildItem ([Environment]::GetFolderPath('Startup')), ([Environment]::GetFolderPath('Programs')) -Filter Radiojoy.lnk | Select-Object FullName | Out-String
+          Start-Sleep 25
+          $agentPid = [int](Get-Content $RJ\state\agent.pid)
+          Get-Process -Id $agentPid | Select-Object Id, ProcessName, StartTime | Out-String
+          Get-ChildItem $RJ\state -Recurse | Select-Object FullName, Length | Out-String
+          Copy-Item $RJ\state\lock\*.jpg artifacts\ -ErrorAction SilentlyContinue
+          Copy-Item $RJ\radiojoy.ico artifacts\
+
+      - name: The agent follows the wallpaper
+        run: |
+          $RJ = "$env:LOCALAPPDATA\Radiojoy"
+          Add-Type -Path $RJ\RadiojoyNative.cs
+          $dwm = 'HKCU:\Software\Microsoft\Windows\DWM'
+          $sound = 'HKCU:\AppEvents\Schemes\Apps\.Default\Notification.Default\.Current'
+          'before: accent {0:x8}, sound {1}' -f (Get-ItemProperty $dwm).AccentColor, (Get-ItemProperty $sound).'(default)'
+          $emily = Get-ChildItem $RJ\theme\backgrounds -Filter '*-emily.jpg' | Select-Object -First 1
+          [void][RadiojoyNative]::SetWallpaper($emily.FullName)
+          Start-Sleep 4
+          'wallpaper now: ' + (Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallPaper
+          'after:  accent {0:x8}, sound {1}' -f (Get-ItemProperty $dwm).AccentColor, (Get-ItemProperty $sound).'(default)'
+          Get-Content $RJ\state\agent.log
+
+      - name: Splash frames
+        run: |
+          $RJ = "$env:LOCALAPPDATA\Radiojoy"
+          $out = & $RJ\radiojoy-sixel.ps1 -Art $RJ\theme\splash\art-emily.png -Rows 20
+          $out
+          $dir = ($out -split ' ', 3)[2]
+          Get-ChildItem $dir | Select-Object Name, Length | Out-String
+          Copy-Item (Join-Path $dir '00.six'), (Join-Path $dir '06.six') artifacts\
+          # the splash itself, as far as it can run without a real terminal
+          $env:WT_SESSION = 'ci'
+          powershell -NoProfile -Command ". '$RJ\radiojoy-shell.ps1'; 'shell loaded, prompt: ' + (prompt)" *> artifacts\splash-output.txt
+          Get-Content artifacts\splash-output.txt
+
+      - name: Radiojoy Week collage
+        run: |
+          $RJ = "$env:LOCALAPPDATA\Radiojoy"
+          $py = (Get-Content $RJ\config.json | ConvertFrom-Json).python
+          "python: $py"
+          if ($py) {
+            $exe = $py -replace 'pythonw\.exe$', 'python.exe'
+            & $exe "$RJ\radiojoy-week.py" --force 2>&1 | Out-String
+            Get-ChildItem $RJ\week -ErrorAction SilentlyContinue | Select-Object Name, Length | Out-String
+            Copy-Item $RJ\week\*.png artifacts\ -ErrorAction SilentlyContinue
+            if (Test-Path $RJ\notify.jsonl) { Get-Content $RJ\notify.jsonl }
+          }
+
+      - name: Screenshot
+        continue-on-error: true
+        run: |
+          Start-Sleep 5
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$PWD\artifacts\desktop.png")
+          "screen $($b.Width)x$($b.Height)"
+
+      - name: Uninstall
+        run: |
+          $RJ = "$env:LOCALAPPDATA\Radiojoy"
+          Copy-Item $RJ\state\agent.log artifacts\ -ErrorAction SilentlyContinue
+          powershell -NoProfile -ExecutionPolicy Bypass -File $RJ\uninstall.ps1
+          Start-Sleep 6
+          'folder left: ' + (Test-Path $RJ)
+          'uninstall entry left: ' + (Test-Path HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Radiojoy)
+          'startup shortcut left: ' + (Test-Path (Join-Path ([Environment]::GetFolderPath('Startup')) 'Radiojoy.lnk'))
+          'wallpaper: ' + (Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallPaper
+          'accent: {0:x8}' -f (Get-ItemProperty HKCU:\Software\Microsoft\Windows\DWM).AccentColor
+          'agent still running: ' + [bool](Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match 'radiojoy-agent' })
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: radiojoy-windows
+          path: artifacts/

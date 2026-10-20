@@ -227,3 +227,33 @@ function Invoke-RJNative([string]$Exe) {
   $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
   try { & $Exe @args 2>$null } finally { $ErrorActionPreference = $old }
 }
+
+# Windows Terminal's settings files (Store, Preview and unpackaged installs).
+function Get-RJTerminalSettings {
+  @("$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+    "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json") | Where-Object { Test-Path -LiteralPath $_ }
+}
+
+# A 256px .ico of a picture (a PNG inside an ICO, which Windows Vista and later read).
+function New-RJIcon([string]$Source, [string]$Out) {
+  Add-Type -AssemblyName System.Drawing
+  $src = [System.Drawing.Image]::FromFile($Source)
+  $bmp = New-Object System.Drawing.Bitmap 256, 256
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $s = [math]::Min(256 / $src.Width, 256 / $src.Height)
+  $w = $src.Width * $s; $h = $src.Height * $s
+  $g.DrawImage($src, [float]((256 - $w) / 2), [float]((256 - $h) / 2), [float]$w, [float]$h)
+  $g.Dispose(); $src.Dispose()
+  $ms = New-Object IO.MemoryStream
+  $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+  $png = $ms.ToArray()
+  $ico = New-Object IO.MemoryStream
+  $bw = New-Object IO.BinaryWriter $ico
+  $bw.Write([uint16]0); $bw.Write([uint16]1); $bw.Write([uint16]1)          # header: icon, 1 image
+  $bw.Write([byte]0); $bw.Write([byte]0); $bw.Write([byte]0); $bw.Write([byte]0) # 256x256
+  $bw.Write([uint16]1); $bw.Write([uint16]32); $bw.Write([uint32]$png.Length); $bw.Write([uint32]22)
+  $bw.Write($png); $bw.Flush()
+  [IO.File]::WriteAllBytes($Out, $ico.ToArray())
+}

@@ -455,6 +455,12 @@ if ($Login) {
 }
 Update-RJTray
 $tray.Visible = $true
+# first run after installing: say hello, since a new tray icon is easy to miss
+$welcomed = Join-Path $RJState 'welcomed'
+if (-not (Test-Path $welcomed)) {
+  Show-RJBalloon "$([char]::ConvertFromUtf32(0x1F4FB)) Radiojoy is on air!" 'Click me for the next wallpaper. Right-click for a quote, Radiojoy Week and more.'
+  New-Item -ItemType File -Force -Path $welcomed | Out-Null
+}
 try { Update-RJFollow } catch { Write-RJLog "follow: $_" }
 try { Update-RJLock } catch { Write-RJLog "lock: $_" }
 

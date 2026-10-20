@@ -1,4 +1,5 @@
-# Radiojoy for Windows 10 / 11. Double-click install.cmd, or from the repo:
+# Radiojoy for Windows 10 / 11. The easy way is the one line in the README (get.ps1),
+# or double-click install.cmd. It asks nothing; from the repo with options:
 #   powershell -ExecutionPolicy Bypass -File windows\install.ps1 [options]
 #   -NoSplash    don't add the terminal splash to your PowerShell profile
 #   -NoSpotify   leave Spotify / Spicetify alone
@@ -6,20 +7,16 @@
 #   -NoBorders   keep the normal window borders and title bars
 #   -NoSounds    keep your notification sound
 #   -NoWeek      no Radiojoy Week collage (it needs Python + Pillow)
-#   -Yes         don't ask anything, take the defaults
+#   -NoExtras    don't install fastfetch or Pillow
+#   -NoDefault   don't make Radiojoy Windows Terminal's default profile
 param([switch]$NoSplash, [switch]$NoSpotify, [switch]$NoAccent, [switch]$NoBorders,
-  [switch]$NoSounds, [switch]$NoWeek, [switch]$Yes)
+  [switch]$NoSounds, [switch]$NoWeek, [switch]$NoExtras, [switch]$NoDefault, [switch]$Yes)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'radiojoy-common.ps1')
 
 function Say([string]$Text) { Write-Host ([char]::ConvertFromUtf32(0x1F4FB) + ' ') -NoNewline -ForegroundColor Red; Write-Host $Text }
 function Warn([string]$Text) { Write-Host "! $Text" -ForegroundColor Yellow }
-function Ask([string]$Question) {
-  if ($Yes) { return $true }
-  $a = Read-Host "$Question [Y/n]"
-  return -not ($a -match '^\s*n')
-}
 
 if ([Environment]::OSVersion.Version.Major -lt 10) { throw 'Radiojoy needs Windows 10 or 11.' }
 $build = [Environment]::OSVersion.Version.Build
@@ -35,7 +32,7 @@ if (Test-Path $pidFile) {
 Say 'Copying the theme'
 New-Item -ItemType Directory -Force -Path $RJ, $RJTheme, $RJState, $RJWeekDir | Out-Null
 Save-RJBackup
-foreach ($f in 'radiojoy-common.ps1', 'radiojoy-agent.ps1', 'radiojoy-splash.ps1', 'radiojoy-prompt.ps1',
+foreach ($f in 'radiojoy-common.ps1', 'radiojoy-agent.ps1', 'radiojoy-splash.ps1', 'radiojoy-prompt.ps1', 'radiojoy-shell.ps1',
   'radiojoy-sixel.ps1', 'RadiojoySixel.cs', 'RadiojoyNative.cs', 'uninstall.ps1') {
   Copy-Item -LiteralPath (Join-Path $PSScriptRoot $f) -Destination $RJ -Force
 }
@@ -99,43 +96,59 @@ foreach ($who in 'radiojoy', 'alastor', 'emily') {
   }
   $schemes += $s
 }
-$shell = if (Get-Command pwsh.exe -ErrorAction SilentlyContinue) { 'pwsh.exe -NoLogo' } else { 'powershell.exe -NoLogo' }
+# The Radiojoy profile runs its own scripts with -ExecutionPolicy Bypass, so it works
+# without changing PowerShell's script policy.
+$shellExe = if (Get-Command pwsh.exe -ErrorAction SilentlyContinue) { 'pwsh.exe' } else { 'powershell.exe' }
+$shell = "$shellExe -NoLogo -NoExit -ExecutionPolicy Bypass -Command "". '$(Join-Path $RJ 'radiojoy-shell.ps1')'"""
+$guid = '{7a1d0e3c-6b6e-4b4a-9a8e-5241444a4f59}'
 $fragment = [ordered]@{
   schemes = $schemes
-  profiles = @([ordered]@{ guid = '{7a1d0e3c-6b6e-4b4a-9a8e-5241444a4f59}'; name = 'Radiojoy'; commandline = $shell
-      colorScheme = 'Radiojoy'; icon = (Join-Path $RJTheme 'splash\heads.png'); startingDirectory = '%USERPROFILE%' })
+  profiles = @([ordered]@{ guid = $guid; name = 'Radiojoy'; commandline = $shell
+      colorScheme = 'Radiojoy'; icon = (Join-Path $RJ 'radiojoy.ico'); startingDirectory = '%USERPROFILE%' })
 }
 $fragDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\Radiojoy'
 Write-RJFile (Join-Path $fragDir 'radiojoy.json') ($fragment | ConvertTo-Json -Depth 5)
-
-# --- PowerShell profile: splash + terminal colours ---------------------------------------
-if (-not $NoSplash) {
-  $policy = Get-ExecutionPolicy
-  if ($policy -in 'Restricted', 'AllSigned', 'Undefined') {
-    Warn "PowerShell won't run profile scripts (execution policy: $policy)."
-    if (Ask 'Allow your own scripts (Set-ExecutionPolicy RemoteSigned for your user only)?') {
-      Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
-    } else { Warn 'Skipping the terminal splash; rerun the installer to add it later.'; $NoSplash = $true }
+# ...and opens when you start Windows Terminal (the old default is put back on uninstall)
+if (-not $NoDefault) {
+  foreach ($f in Get-RJTerminalSettings) {
+    $text = Read-RJText $f
+    $m = [regex]::Match($text, '"defaultProfile"\s*:\s*"([^"]*)"')
+    if (-not $m.Success -or $m.Groups[1].Value -eq $guid) { continue }
+    $saved = Join-Path $RJState 'terminal-default.json'
+    $old = @{}
+    try { $o = (Read-RJText $saved) | ConvertFrom-Json; foreach ($q in $o.PSObject.Properties) { $old[$q.Name] = $q.Value } } catch { }
+    if (-not $old.ContainsKey($f)) { $old[$f] = $m.Groups[1].Value; Write-RJFile $saved ($old | ConvertTo-Json) }
+    Write-RJFile $f ($text.Substring(0, $m.Groups[1].Index) + $guid + $text.Substring($m.Groups[1].Index + $m.Groups[1].Length))
   }
 }
+
+# --- PowerShell profile: splash + colours in every PowerShell window --------------------
+# Only where PowerShell may run profile scripts; the Radiojoy terminal profile works anyway.
+$policy = Get-ExecutionPolicy
+$profileOk = $policy -in 'RemoteSigned', 'Unrestricted', 'Bypass'
 $block = @'
 # >>> radiojoy >>>
-if (Test-Path "$env:LOCALAPPDATA\Radiojoy\radiojoy-prompt.ps1") {
-  if ($Host.Name -eq 'ConsoleHost') { & "$env:LOCALAPPDATA\Radiojoy\radiojoy-splash.ps1" }
-  . "$env:LOCALAPPDATA\Radiojoy\radiojoy-prompt.ps1"
+if (-not $global:RadiojoyLoaded -and (Test-Path "$env:LOCALAPPDATA\Radiojoy\radiojoy-shell.ps1")) {
+  . "$env:LOCALAPPDATA\Radiojoy\radiojoy-shell.ps1"
 }
 # <<< radiojoy <<<
 '@
 $docs = [Environment]::GetFolderPath('MyDocuments')
 foreach ($dir in 'WindowsPowerShell', 'PowerShell') {
-  Edit-RJProfile (Join-Path $docs "$dir\profile.ps1") $(if ($NoSplash) { '' } else { $block })
+  Edit-RJProfile (Join-Path $docs "$dir\profile.ps1") $(if ($NoSplash -or -not $profileOk) { '' } else { $block })
 }
-if (-not $NoSplash) { Say 'Terminal splash added to your PowerShell profile (Windows Terminal 1.22+ draws the art)' }
+
+# --- extras: fastfetch for the splash ---------------------------------------------------
+if (-not $NoExtras -and -not (Get-Command fastfetch -ErrorAction SilentlyContinue) -and (Get-Command winget -ErrorAction SilentlyContinue)) {
+  Say 'Installing fastfetch (the system info in the terminal splash)'
+  Invoke-RJNative winget install --exact --id Fastfetch-cli.Fastfetch --scope user --silent --accept-source-agreements --accept-package-agreements | Out-Null
+}
 
 # --- Spotify (Spicetify) ---------------------------------------------------------------
+$notes = @()
 if (-not $NoSpotify) {
   if (Get-Command spicetify -ErrorAction SilentlyContinue) {
-    Say 'Spotify: Radiojoy colours (Spicetify)'
+    Say 'Spotify colours (Spicetify)'
     try {
       $cfg = Split-Path -Parent "$(Invoke-RJNative spicetify -c | Select-Object -Last 1)".Trim()
       New-Item -ItemType Directory -Force -Path (Join-Path $cfg 'Extensions'), (Join-Path $cfg 'Themes') | Out-Null
@@ -144,14 +157,14 @@ if (-not $NoSpotify) {
       $current = "$(Invoke-RJNative spicetify config current_theme | Select-Object -Last 1)".Trim()
       if (-not $current -or $current -in 'SpicetifyDefault', 'marketplace', 'Radiojoy') {
         Invoke-RJNative spicetify config current_theme Radiojoy color_scheme Radiojoy | Out-Null
-      } else { Warn "Keeping your Spicetify theme '$current'; Alastor / Emily colours still follow the wallpaper." }
+      }
       Invoke-RJNative spicetify config extensions radiojoy-follow.js | Out-Null
       Invoke-RJNative spicetify apply | Out-Null
       if ($LASTEXITCODE) { Invoke-RJNative spicetify backup apply | Out-Null }
-      if ($LASTEXITCODE) { Warn 'spicetify apply failed; run "spicetify backup apply" yourself.' }
-    } catch { Warn "Spicetify: $_" }
+      if ($LASTEXITCODE) { $notes += 'Spotify: run "spicetify backup apply" once to finish.' }
+    } catch { $notes += "Spotify colours couldn't be set up ($_)." }
   } else {
-    Warn 'Spotify colours need Spicetify (spicetify.app); install it and rerun this to add them.'
+    $notes += 'Want Spotify in Radiojoy colours too? Install Spicetify (spicetify.app), then install Radiojoy again.'
   }
 }
 
@@ -167,45 +180,61 @@ if (-not $NoWeek) {
   }
   if ($py) {
     Invoke-RJNative $py -c 'import PIL'
-    if ($LASTEXITCODE -and (Ask 'The Radiojoy Week collage needs Pillow. Install it (pip --user)?')) {
+    if ($LASTEXITCODE -and -not $NoExtras) {
+      Say 'Installing Pillow (for the Radiojoy Week collage)'
       Invoke-RJNative $py -m pip install --user --quiet pillow
     }
     Invoke-RJNative $py -c 'import PIL'
     if (-not $LASTEXITCODE) {
       $pyw = Join-Path (Split-Path $py) 'pythonw.exe'
       $config.python = if (Test-Path $pyw) { $pyw } else { $py }
-      Say 'Radiojoy Week collage: on'
-      if (-not (Get-Command tesseract -ErrorAction SilentlyContinue)) {
-        Warn 'Optional: Tesseract OCR lets it read next year''s week from announcement banners.'
-      }
     }
-  } else {
-    Warn 'The Radiojoy Week collage needs Python (winget install Python.Python.3.13); rerun this after.'
+  }
+  if (-not $config.python) {
+    $notes += 'Want the Radiojoy Week collage wallpaper? Install Python (python.org), then install Radiojoy again.'
   }
 }
 Write-RJFile (Join-Path $RJ 'config.json') ($config | ConvertTo-Json)
 
-# --- start at login, and now ------------------------------------------------------------------
-Say 'Starting Radiojoy (and at every login)'
+# --- icon, Start menu, Settings > Apps ------------------------------------------------------
+New-RJIcon (Join-Path $RJTheme 'splash\heads.png') (Join-Path $RJ 'radiojoy.ico')
 $agentArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $RJ 'radiojoy-agent.ps1')`""
 $conhost = Join-Path $env:WINDIR 'System32\conhost.exe'
-$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('Startup')) 'Radiojoy.lnk'))
-if ($build -ge 19041) {
-  # conhost --headless: no window at all, even where Windows Terminal is the default
-  $shortcut.TargetPath = $conhost
-  $shortcut.Arguments = "--headless powershell.exe $agentArgs -Login"
-} else {
-  $shortcut.TargetPath = 'powershell.exe'
-  $shortcut.Arguments = "$agentArgs -Login"
-  $shortcut.WindowStyle = 7
+$wsh = New-Object -ComObject WScript.Shell
+function New-RJShortcut([string]$Path, [string]$Arguments) {
+  $sc = $wsh.CreateShortcut($Path)
+  if ($build -ge 19041) {
+    # conhost --headless: no window at all, even where Windows Terminal is the default
+    $sc.TargetPath = $conhost; $sc.Arguments = "--headless powershell.exe $Arguments"
+  } else { $sc.TargetPath = 'powershell.exe'; $sc.Arguments = $Arguments; $sc.WindowStyle = 7 }
+  $sc.WorkingDirectory = $RJ
+  $sc.IconLocation = Join-Path $RJ 'radiojoy.ico'
+  $sc.Description = 'Radiojoy: the desktop follows the wallpaper'
+  $sc.Save()
 }
-$shortcut.WorkingDirectory = $RJ
-$shortcut.Description = 'Radiojoy: the desktop follows the wallpaper'
-$shortcut.Save()
+New-RJShortcut (Join-Path ([Environment]::GetFolderPath('Startup')) 'Radiojoy.lnk') "$agentArgs -Login"
+# in the Start menu, to bring the tray icon back after "Quit"
+New-RJShortcut (Join-Path ([Environment]::GetFolderPath('Programs')) 'Radiojoy.lnk') $agentArgs
+
+$uninstall = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Radiojoy'
+New-Item -Path $uninstall -Force | Out-Null
+$un = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $RJ 'uninstall.ps1')`""
+foreach ($kv in @(@('DisplayName', 'Radiojoy'), @('DisplayIcon', (Join-Path $RJ 'radiojoy.ico')), @('Publisher', 'blade361'),
+    @('DisplayVersion', '1.0'), @('InstallLocation', $RJ), @('UninstallString', $un), @('QuietUninstallString', $un),
+    @('URLInfoAbout', 'https://github.com/blade361/omarchy-radiojoy'))) {
+  Set-ItemProperty -Path $uninstall -Name $kv[0] -Value $kv[1]
+}
+Set-RJDword $uninstall 'NoModify' 1; Set-RJDword $uninstall 'NoRepair' 1
+Set-RJDword $uninstall 'EstimatedSize' ([int]((Get-ChildItem -LiteralPath $RJ -Recurse -File | Measure-Object Length -Sum).Sum / 1KB))
+
+# --- start it -----------------------------------------------------------------------------
+Remove-Item (Join-Path $RJState 'welcomed') -ErrorAction SilentlyContinue
 if ($build -ge 19041) { Start-Process -FilePath $conhost -ArgumentList "--headless powershell.exe $agentArgs" }
 else { Start-Process -FilePath 'powershell.exe' -ArgumentList $agentArgs -WindowStyle Hidden }
 
 Write-Host ''
-Say 'Done! Click the Radiojoy icon in the tray (it may hide under the ^ arrow) for the next wallpaper.'
-Write-Host '   Windows Terminal: pick the "Radiojoy" profile, or set it as the default in Settings.'
-Write-Host "   Uninstall: powershell -ExecutionPolicy Bypass -File `"$(Join-Path $RJ 'uninstall.ps1')`""
+Say 'Radiojoy is on! Stay tuned.'
+Write-Host '   - Click the Radiojoy icon by the clock for the next wallpaper (it may hide under ^).'
+Write-Host '   - Open Windows Terminal to see the splash.'
+Write-Host '   - To remove it: Settings > Apps > Installed apps > Radiojoy > Uninstall.'
+foreach ($n in $notes) { Write-Host "   - $n" -ForegroundColor DarkGray }

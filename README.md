@@ -117,10 +117,16 @@ omarchy theme set tokyo-night   # any other theme
 
 ## Windows 10 / 11
 
-Most of the theme also runs on Windows, from the `windows/` folder. Download the repo
-(**Code → Download ZIP**), unzip it and double-click **`windows\install.cmd`**. Nothing is
-installed system-wide and no admin rights are needed; it all lives in
-`%LOCALAPPDATA%\Radiojoy`. The Windows version is new: if something doesn't work, please
+Most of the theme also runs on Windows. To install it, open **PowerShell** (Start menu →
+type *PowerShell* → Enter), paste this line and press Enter:
+
+```powershell
+irm https://raw.githubusercontent.com/blade361/omarchy-radiojoy/windows/windows/get.ps1 | iex
+```
+
+That's all: no admin rights, no questions, about a minute. To remove it later, go to
+**Settings → Apps → Installed apps → Radiojoy → Uninstall**; that puts your wallpaper,
+colours and sounds back. The Windows version is new: if something doesn't work, please
 [open an issue](https://github.com/blade361/omarchy-radiojoy/issues).
 
 The desktop still follows the wallpaper: a small background program (the 📻 tray icon,
@@ -129,30 +135,26 @@ that isn't one of the theme's turns it all off, the way switching themes does on
 
 | | Windows |
 |---|---|
-| **Wallpapers** | all 57, same order; click the tray icon for the next one |
+| **Wallpapers** | all 57, same order; click the 📻 Radiojoy icon by the clock for the next one |
 | **Window borders & title bars** | Windows 11: the focused window's border runs through the character's gradient, title bars in their colours. Windows 10: accent-coloured title bars |
 | **Accent colour** | Start, taskbar and accent follow the wallpaper; dark mode on |
-| **Terminal splash** | PowerShell profile: the art beside the system info ([fastfetch](https://github.com/fastfetch-cli/fastfetch) if installed), tuning in through static, quote and status line. Real images need Windows Terminal 1.22 or newer (sixel); older terminals get the text version |
-| **Terminal colours** | Windows Terminal schemes *Radiojoy*, *Radiojoy Alastor*, *Radiojoy Emily* and a *Radiojoy* profile; open terminals switch palette at their next prompt |
+| **Terminal splash** | in Windows Terminal: the art beside the system info ([fastfetch](https://github.com/fastfetch-cli/fastfetch), installed for you), tuning in through static, quote and status line. Real images need Windows Terminal 1.22 or newer (sixel); older terminals get the text version |
+| **Terminal colours** | Windows Terminal opens in the *Radiojoy* profile (schemes *Radiojoy*, *Radiojoy Alastor*, *Radiojoy Emily*); open terminals switch palette at their next prompt |
 | **Lock screen** | steps one wallpaper along the order on every lock, with the character art at the sides and the tagline |
 | **Tray icon** (the bar button) | the character's heads, a red dot while Spotify plays (on air); right-click for a quote, Radiojoy Week and "check for new week art" |
 | **Spotify** | with [Spicetify](https://spicetify.app), live like on Linux (not the Microsoft Store Spotify, which Spicetify can't patch) |
-| **Zen / Firefox** | same `@import` line as below, in the profile under `%APPDATA%` |
+| **Zen / Firefox** | same `@import` line as in [Zen / Firefox](#zen--firefox) above, in the profile under `%APPDATA%` |
 | **Sounds** | the login sound, and each character's notification sound |
-| **Radiojoy Week** | today's prompt in the tray and the splash. The collage wallpaper needs [Python](https://www.python.org) with Pillow (the installer offers to add Pillow); Tesseract OCR is optional, for finding next year's week |
+| **Radiojoy Week** | today's prompt in the tray and the splash. The collage wallpaper needs [Python](https://www.python.org) with Pillow (the installer adds Pillow); Tesseract OCR is optional, for finding next year's week |
 
 Not on Windows: the screensaver (Windows screensavers are programs), redrawing the
 splash in terminals you haven't typed in yet, the bar/menu colours, and the boot logo.
 
-Options for `install.ps1` (run it from PowerShell with
-`powershell -ExecutionPolicy Bypass -File windows\install.ps1 -NoSounds`, for example):
-`-NoSplash`, `-NoSpotify`, `-NoAccent`, `-NoBorders`, `-NoSounds`, `-NoWeek`, `-Yes`.
-The splash needs PowerShell to run your profile; if it isn't allowed to, the installer
-asks to set `RemoteSigned` for your user (the usual setting for this).
-
-To uninstall, run `%LOCALAPPDATA%\Radiojoy\uninstall.ps1` the same way. It puts back
-your wallpaper, colours, sound, profile and Spotify theme. If you used Windows
-Spotlight on the lock screen, turn it back on in Settings → Personalization → Lock screen.
+For Spotify colours, install [Spicetify](https://spicetify.app) first; for the Radiojoy
+Week collage, [Python](https://www.python.org). If you add them later, run the line again.
+Advanced: `windows\install.ps1` takes `-NoSplash`, `-NoSpotify`, `-NoAccent`, `-NoBorders`,
+`-NoSounds`, `-NoWeek`, `-NoExtras` (no fastfetch / Pillow) and `-NoDefault` (keep your
+default Windows Terminal profile).
 
 ## Fan art
 

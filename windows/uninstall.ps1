@@ -13,7 +13,9 @@ if (Test-Path $pidFile) {
   if ($agent) { if (-not $agent.WaitForExit(8000)) { $agent.Kill() } }
   Say 'Stopped Radiojoy'
 }
-Remove-Item (Join-Path ([Environment]::GetFolderPath('Startup')) 'Radiojoy.lnk') -ErrorAction SilentlyContinue
+Remove-Item (Join-Path ([Environment]::GetFolderPath('Startup')) 'Radiojoy.lnk'),
+  (Join-Path ([Environment]::GetFolderPath('Programs')) 'Radiojoy.lnk') -ErrorAction SilentlyContinue
+Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Radiojoy' -Recurse -ErrorAction SilentlyContinue
 
 $backup = Get-RJBackup
 if ($backup) {
@@ -44,6 +46,16 @@ if ($backup) {
 $docs = [Environment]::GetFolderPath('MyDocuments')
 foreach ($dir in 'WindowsPowerShell', 'PowerShell') { Edit-RJProfile (Join-Path $docs "$dir\profile.ps1") '' }
 Remove-Item (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\Radiojoy') -Recurse -Force -ErrorAction SilentlyContinue
+# Windows Terminal opens your old default profile again
+try {
+  $old = (Read-RJText (Join-Path $RJState 'terminal-default.json')) | ConvertFrom-Json
+  foreach ($q in $old.PSObject.Properties) {
+    if (-not (Test-Path -LiteralPath $q.Name)) { continue }
+    $text = Read-RJText $q.Name
+    $m = [regex]::Match($text, '"defaultProfile"\s*:\s*"(\{7a1d0e3c-6b6e-4b4a-9a8e-5241444a4f59\})"')
+    if ($m.Success) { Write-RJFile $q.Name ($text.Substring(0, $m.Groups[1].Index) + $q.Value + $text.Substring($m.Groups[1].Index + $m.Groups[1].Length)) }
+  }
+} catch { }
 Say 'Removed the terminal splash and Windows Terminal schemes'
 
 if (Get-Command spicetify -ErrorAction SilentlyContinue) {

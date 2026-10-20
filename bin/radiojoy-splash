@@ -52,6 +52,7 @@ quote() {
     -emily) status="😇  Halo: polished  ·  Wings: 6  ·  Joy: 100%" ;;
     *) status="📻😇  Now playing: Radiojoy on 666 AM" ;;
   esac
+  [[ $week_credit ]] && status="🎨  Newest Radiojoy Week art: $week_credit"
   printf '\n'
   qlines=1
   if [[ -s $quotes ]]; then
@@ -63,7 +64,11 @@ quote() {
   if [[ -f $theme/radiojoy-week.txt ]]; then
     today=$(date +%F)
     if next=$(grep -s "^$today"$'\t' "$theme/radiojoy-week.txt" | cut -f2-) && [[ $next ]]; then
-      printf '%*s\e[1;38;2;242;193;78m\uf4ce  Radiojoy Week · %s\e[0m\n' "$pad_left" "" "$next"
+      if grep -qs "^$(date -d tomorrow +%F)"$'\t' "$theme/radiojoy-week.txt"; then
+        printf '%*s\e[1;38;2;242;193;78m\uf4ce  Radiojoy Week · %s\e[0m\n' "$pad_left" "" "$next"
+      else  # the last day: the finale
+        printf '%*s\e[1;38;2;242;193;78m\uf004  Radiojoy Week · %s  \e[38;2;220;34;73m\uf004\e[0m\n' "$pad_left" "" "$next"
+      fi
       (( qlines++ ))
     elif next=$(grep -sE '^[0-9]{4}-' "$theme/radiojoy-week.txt" | cut -f1 | sort | awk -v d="$today" '$1 > d' | head -1) && [[ $next ]]; then
       days=$(( ($(date -d "$next" +%s) - $(date -d "$today" +%s)) / 86400 ))
@@ -100,6 +105,16 @@ esac
 art=$splash/art$who.png; [[ -f $art ]] || art=$splash/art.png
 dir=$splash/text$who; [[ -f $dir/00.txt ]] || dir=$splash
 quotes=$splash/quotes$who.txt; [[ -s $quotes ]] || quotes=$splash/quotes.txt
+
+# During Radiojoy Week: the newest piece of the week's art instead (radiojoy-week
+# keeps a link to it), credited in the status line.
+week_dir=${XDG_CACHE_HOME:-$HOME/.cache}/radiojoy-week
+week_credit=
+if grep -qs "^$(date +%F)"$'\t' "$theme/radiojoy-week.txt" && [[ -f $week_dir/newest && -s $week_dir/newest.txt ]]; then
+  art=$(readlink -f "$week_dir/newest")
+  IFS=$'\t' read -r w_artist w_day <"$week_dir/newest.txt"
+  week_credit="$w_artist (Day $w_day)"
+fi
 
 # a new terminal starts at 80x24 and gets its real size a moment later
 [[ $into ]] || for _ in {1..10}; do [[ $(stty -F "$term" size 2>/dev/null) != "24 80" ]] && break; sleep 0.05; done

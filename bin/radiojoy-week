@@ -334,6 +334,16 @@ def build(week, today, pieces, out, final=False):
     top = 70  # below the bar
     d.text((60, top + 14), STAR, font=icon(52), fill=(242, 193, 78))
     d.text((128, top), f"Radiojoy Week {week[0][0].year}", font=title_f, fill=(242, 193, 78))
+    # the last day (and the keepsake after it) is the finale: gold frames, and the
+    # last prompt's closing words beside the title
+    finale = final or today >= week[-1][0]
+    if finale:
+        rest = week[-1][1].split(":", 1)[-1]
+        motto = rest.split("/")[-1].strip()
+        x = 128 + d.textlength(f"Radiojoy Week {week[0][0].year}", font=title_f) + 36
+        d.text((x, top + 34), f"~ {motto} ~", font=font("NotoSerif-Italic.ttf", 34), fill=(255, 224, 138))
+        d.text((x + d.textlength(f"~ {motto} ~", font=font("NotoSerif-Italic.ttf", 34)) + 16, top + 34),
+               "\uf004", font=icon(30), fill=(220, 34, 73))  # a heart
 
     # prompt list: done days crossed out, today highlighted
     y = top + 120
@@ -412,10 +422,14 @@ def build(week, today, pieces, out, final=False):
                 im = im.resize((max(1, round(im.width * rh / im.height)), max(1, round(rh))), Image.LANCZOS)
                 ix, iy = round(x), round(y)
                 glow = Image.new("RGBA", bg.size, (0, 0, 0, 0))
-                ImageDraw.Draw(glow).rectangle((ix - 6, iy - 6, ix + im.width + 6, iy + im.height + 6), fill=(242, 193, 78, 90))
+                ImageDraw.Draw(glow).rectangle((ix - 6, iy - 6, ix + im.width + 6, iy + im.height + 6),
+                                               fill=(242, 193, 78, 160 if finale else 90))
                 bg.alpha_composite(glow.filter(ImageFilter.GaussianBlur(10)))
                 d = ImageDraw.Draw(bg)
-                d.rectangle((ix - 3, iy - 3, ix + im.width + 2, iy + im.height + 2), outline=(236, 233, 247), width=2)
+                if finale:  # gold frame
+                    d.rectangle((ix - 5, iy - 5, ix + im.width + 4, iy + im.height + 4), outline=(242, 193, 78), width=4)
+                else:
+                    d.rectangle((ix - 3, iy - 3, ix + im.width + 2, iy + im.height + 2), outline=(236, 233, 247), width=2)
                 bg.paste(im, (ix, iy))
                 d.text((ix + im.width / 2, iy + im.height + 18), p["artist"],
                        font=small_f, fill=(236, 233, 247), anchor="mm")
@@ -662,6 +676,7 @@ def main():
         return
     out = OUT_DIR / f"radiojoy-week-{week[0][0].year}.png"
     pieces = collect(week)
+    mark_newest(pieces)
     keys = sorted(p["key"] for p in pieces)
     new = [p for p in pieces if p["key"] not in set(state.get("keys", keys))]
     sig = hashlib.sha1(json.dumps([str(today)] + keys).encode()).hexdigest()
@@ -674,6 +689,25 @@ def main():
     save_state(state)
     set_wallpaper(out)  # a new day or new art: show it
     return {"pieces": pieces, "new": new, "built": True}
+
+
+def mark_newest(pieces):
+    """The latest day's most recently added piece, for the terminal splash:
+    CACHE/newest (a symlink to it) and CACHE/newest.txt (artist<TAB>day)."""
+    link, info = CACHE / "newest", CACHE / "newest.txt"
+    if not pieces:
+        link.unlink(missing_ok=True)
+        info.unlink(missing_ok=True)
+        return
+    order = {p["key"]: i for i, p in enumerate(pieces)}  # index order = order added
+    p = max(pieces, key=lambda p: (p["day"], order[p["key"]]))
+    if link.is_symlink() and link.resolve() == Path(p["path"]).resolve() and info.exists():
+        return
+    tmp = CACHE / "newest.tmp"
+    tmp.unlink(missing_ok=True)
+    tmp.symlink_to(p["path"])
+    tmp.replace(link)
+    info.write_text(f"{p['artist']}\t{p['day']}\n")
 
 
 def update():

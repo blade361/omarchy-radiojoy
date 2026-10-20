@@ -55,7 +55,15 @@ Radiojoy one gives you both.
   `radiojoy-week --add-artist HANDLE` adds them to the collage.
 - **Terminal splash:** the art is drawn as a real image beside fastfetch and "tunes in"
   through radio static, with a quote and a little status line under it. Terminals you haven't typed in yet redraw when the wallpaper changes.
+  During Radiojoy Week it shows the newest piece of the week's art instead, credited in the status line.
 - **Lock screen:** every time you lock, the background steps to the next wallpaper in the order.
+  During Radiojoy Week it shows the day's prompt under the clock.
+- **Day 7 finale:** on the week's last day (and in the keepsake after it) the collage gets
+  gold frames and the last prompt's closing words beside the title; the terminal line gets hearts.
+- **Credits:** middle-click the radio button for a page crediting every artist, with each
+  piece linked to its post (`radiojoy-week --credits`).
+- **btop and cava** follow the wallpaper's palette too (cava via `theme = 'radiojoy'` in
+  `~/.config/cava/config`, which the installer sets if you don't use another cava theme).
 - A radio "tuning in" sound at login.
 
 ![Lock screen](docs/lock-screen.png)

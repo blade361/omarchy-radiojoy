@@ -12,7 +12,22 @@ plugin = Path(sys.argv[1])
 check = "--check" in sys.argv
 BIN = '\\"$HOME/.local/bin/radiojoy-lock-background\\"'
 
-VIEW_BLOCK = '''    // Radiojoy (omarchy-radiojoy): full-body art at the sides when the theme ships it,
+VIEW_BLOCK = '''    // Radiojoy Week: today's prompt under the tagline (theme file radiojoy-week.txt).
+    FileView {
+      id: weekFile
+      path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/radiojoy-week.txt"
+      blockLoading: true
+      watchChanges: true
+      onFileChanged: reload()
+    }
+    readonly property string weekPrompt: {
+      var day = Qt.formatDate(lockDecor.now, "yyyy-MM-dd") + "\t"
+      var lines = String(weekFile.text() || "").split("\n")
+      for (var i = 0; i < lines.length; i++)
+        if (lines[i].indexOf(day) === 0) return lines[i].slice(day.length).trim()
+      return ""
+    }
+    // Radiojoy (omarchy-radiojoy): full-body art at the sides when the theme ships it,
     // following the lock background (Alastor / Emily / both).
     readonly property string themeDir: "file://" + Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/"
     readonly property bool hasSideArt: leftArt.status === Image.Ready || rightArt.status === Image.Ready
@@ -112,13 +127,23 @@ VIEW_BLOCK = '''    // Radiojoy (omarchy-radiojoy): full-body art at the sides w
         font.italic: true
         font.pixelSize: Math.round(root.height * 0.022)
       }
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        visible: lockStage.weekPrompt !== ""
+        textFormat: Text.PlainText
+        text: "\u2605 Radiojoy Week \u00b7 " + lockStage.weekPrompt
+        color: "#f2c14e"
+        font.family: Style.font.family
+        font.pixelSize: Math.round(root.height * 0.022)
+      }
     }
 
 '''
 
 PATCHES = {
     "LockView.qml": [
-        ("import QtQuick.Effects\n", "import QtQuick.Effects\nimport Quickshell\n"),
+        ("import QtQuick.Effects\n", "import QtQuick.Effects\nimport Quickshell\nimport Quickshell.Io\n"),
         ("  Rectangle {\n    anchors.fill: parent\n    color: Commons.Color.background\n",
          "  Rectangle {\n    id: lockStage\n    anchors.fill: parent\n    color: Commons.Color.background\n"),
         ("    BorderSurface {\n      id: inputField\n", VIEW_BLOCK + "    BorderSurface {\n      id: inputField\n"),

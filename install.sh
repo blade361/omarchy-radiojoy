@@ -118,4 +118,4 @@ if [[ $session ]]; then
 fi
 
 say "Done! Open a new terminal, and click the radio on the bar for the next wallpaper."
-say "Fan art isn't included; the README links the artists' Radiojoy pieces."
+say "Fan art is included with the artists' permission; please don't repost it (see README)."

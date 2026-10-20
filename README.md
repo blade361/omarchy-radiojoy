@@ -21,8 +21,9 @@ Radiojoy one gives you both.
 | **Terminal colours** | crimson on maroon | lavender on twilight | theme colours |
 | **Zen / Firefox** (opt-in) | maroon & crimson | twilight & halo blue | theme colours |
 
-- **47 official wallpapers** in a repeating Alastor → Emily → Radiojoy order (23 Alastor,
-  23 Emily, plus a picture of the pair). The radio button on the bar goes to the next one.
+- **57 wallpapers** in a repeating Alastor → Emily → Radiojoy order (19 of each): official
+  show stills for Alastor and Emily, and Radiojoy fan art, included with the artists'
+  permission (see [Fan art](#fan-art)). The radio button on the bar goes to the next one.
 - **Radiojoy Week:** during the week in `radiojoy-week.txt` (2026: Oct 18–24) the bar
   button wears a ★ and shows the day's prompt, and the terminal shows it too; the rest
   of the year it counts down. While Spotify plays, the button goes **on air**.
@@ -33,7 +34,8 @@ Radiojoy one gives you both.
   adds new pieces as the artists post them and switches the wallpaper to the new collage
   when it changes; after the week it's removed. List the artists in
   `~/.config/omarchy/themes/radiojoy/radiojoy-week-artists.txt` (Bluesky or Tumblr
-  accounts, only ones you've checked draw by hand); with none, it shows just the prompts.
+  accounts, only ones you've checked draw by hand); RadioJoy Enjoyer and termsandfeathers
+  are listed already. With none, it shows just the prompts.
   When the week is over the collage stays in the wallpaper carousel as a keepsake
   ("Radiojoy Week 2026"), with all of the week's art.
 - **Next year's week:** once a week it looks for an upcoming Radiojoy Week, reading the
@@ -106,12 +108,11 @@ omarchy theme set tokyo-night   # any other theme
 
 ## Fan art
 
-These Radiojoy pieces aren't included because they belong to their artists, but
-they're lovely as wallpapers. Get them from the artists, and if you add them to
-`~/.config/omarchy/backgrounds/radiojoy/`, name them `NN-radiojoy-name.jpg` to slot
-them into the order.
+The Radiojoy wallpapers are fan art, included **with each artist's permission**. Each one
+has the artist's name in the corner. They're not covered by the MIT licence. Please don't
+repost them; follow the artists and find their work at the links below.
 
-- Dragonfoxgirl: [Holy Light](https://www.deviantart.com/dragonfoxgirl/art/Holy-Light.-1273980120),
+- Dragonfoxgirl ([DeviantArt](https://www.deviantart.com/dragonfoxgirl)): [Holy Light](https://www.deviantart.com/dragonfoxgirl/art/Holy-Light.-1273980120),
   [Oops](https://www.deviantart.com/dragonfoxgirl/art/Oops-1262499961),
   [She Listens](https://www.deviantart.com/dragonfoxgirl/art/She-Listens.-1347366914),
   [You Promised To Be Good!](https://www.deviantart.com/dragonfoxgirl/art/You-Promised-To-Be-Good%21-1260603204),
@@ -119,15 +120,17 @@ them into the order.
   [Annoying little angel on my shoulder](https://www.deviantart.com/dragonfoxgirl/art/Annoying-little-angel-on-my-shoulder-1277248105),
   [Al Al Al!](https://www.deviantart.com/dragonfoxgirl/art/Al-Al-Al%21-1233950345)
 - RadioJoy Enjoyer ([Bluesky](https://bsky.app/profile/radiojoyenjoyer.bsky.social), X @RadioJoyEnjoyer):
-  Radiojoy Week 2026 [Day 1 "Fallen Emily"](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3my6zctsua227),
-  [Day 2 "Dove/Shadow"](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3myayejcjqs2e),
   [Doodling!](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3mxxnxxevzk2x),
-  [My parents](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3msyqfqud2227).
-  Please don't repost their art; they ask people not to.
-- termsandfeathers: Radiojoy Week 2026 [Day 1](https://www.tumblr.com/termsandfeathers/830853127253196800)
-  and [Day 2](https://www.tumblr.com/termsandfeathers/830907476634451968) sketches, [cherry blossoms](https://www.tumblr.com/termsandfeathers/814820394436640768),
+  [My parents](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3msyqfqud2227),
+  [Emily](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3mlb76mwsek2m),
+  [cuddles](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3mjmjphmstk22);
+  Radiojoy Week 2026 [Day 1 "Fallen Emily"](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3my6zctsua227)
+  and [Day 2 "Dove/Shadow"](https://bsky.app/profile/radiojoyenjoyer.bsky.social/post/3myayejcjqs2e) (in the week collage)
+- termsandfeathers ([Tumblr](https://termsandfeathers.tumblr.com)): [cherry blossoms](https://www.tumblr.com/termsandfeathers/814820394436640768),
   [50 followers Q+A](https://www.tumblr.com/termsandfeathers/816085258794614784),
-  ["This is dangerous"](https://www.tumblr.com/termsandfeathers/812903677665968128)
+  ["This is dangerous"](https://www.tumblr.com/termsandfeathers/812903677665968128);
+  Radiojoy Week 2026 [Day 1](https://www.tumblr.com/termsandfeathers/830853127253196800)
+  and [Day 2](https://www.tumblr.com/termsandfeathers/830907476634451968) sketches (in the week collage)
 - Pikagalaxy30: [Alastor x Emily](https://www.deviantart.com/pikagalaxy30/art/Alastor-x-Emily-%28Hazbin-Hotel%2C-Radiojoy%29-1267936052)
 - OctoDemon: [RadioJoy](https://www.deviantart.com/octodemon/art/RadioJoy-1381048921)
 - MadridStone: [Date Night](https://www.deviantart.com/madridstone/art/Date-Night-%28RadioJoy%29-1332050081)
@@ -135,9 +138,9 @@ them into the order.
 
 ## Credits
 
-- Hazbin Hotel, Alastor and Emily © Vivienne Medrano / A24 / Prime Video. The wallpapers,
-  character renders and stills come from the [Hazbin Hotel wiki](https://hazbinhotel.fandom.com).
+- Hazbin Hotel, Alastor and Emily © Vivienne Medrano / A24 / Prime Video. The Alastor and
+  Emily wallpapers, character renders and stills come from the [Hazbin Hotel wiki](https://hazbinhotel.fandom.com).
   This is an unofficial fan project.
 - The lock screen builds on Omarchy's lock plugin ([MIT](https://github.com/basecamp/omarchy)).
 - The scripts, theme files and login sound in this repo are MIT licensed (see LICENSE).
-  The art is not; it belongs to its owners.
+  The art is not; it belongs to its owners (show art) and the artists above (fan art).

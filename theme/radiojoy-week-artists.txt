@@ -3,3 +3,5 @@
 # Format: <bluesky|tumblr> <account> <name shown>
 # bluesky someartist.bsky.social Some Artist
 # tumblr someartist someartist
+bluesky radiojoyenjoyer.bsky.social RadioJoy Enjoyer
+tumblr termsandfeathers termsandfeathers

@@ -121,7 +121,7 @@ Most of the theme also runs on Windows. To install it, open **PowerShell** (Star
 type *PowerShell* → Enter), paste this line and press Enter:
 
 ```powershell
-irm https://raw.githubusercontent.com/blade361/omarchy-radiojoy/windows/windows/get.ps1 | iex
+irm https://raw.githubusercontent.com/blade361/omarchy-radiojoy/main/windows/get.ps1 | iex
 ```
 
 That's all: no admin rights, no questions, about a minute. To remove it later, go to

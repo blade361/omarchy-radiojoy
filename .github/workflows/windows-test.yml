@@ -60,10 +60,18 @@ jobs:
           $sound = 'HKCU:\AppEvents\Schemes\Apps\.Default\Notification.Default\.Current'
           'before: accent {0:x8}, sound {1}' -f (Get-ItemProperty $dwm).AccentColor, (Get-ItemProperty $sound).'(default)'
           $emily = Get-ChildItem $RJ\theme\backgrounds -Filter '*-emily.jpg' | Select-Object -First 1
+          # during Radiojoy Week the agent puts the collage straight back
           [void][RadiojoyNative]::SetWallpaper($emily.FullName)
           Start-Sleep 4
-          'wallpaper now: ' + (Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallPaper
+          'during the week, wallpaper now: ' + (Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallPaper
+          # outside the week (its dates taken out on this VM) it follows the character
+          $week = "$RJ\theme\radiojoy-week.txt"
+          (Get-Content $week -Encoding UTF8) | Where-Object { $_ -notmatch '^2026-10-' } | Set-Content $week -Encoding UTF8
+          [void][RadiojoyNative]::SetWallpaper($emily.FullName)
+          Start-Sleep 4
+          'outside the week, wallpaper now: ' + (Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallPaper
           'after:  accent {0:x8}, sound {1}' -f (Get-ItemProperty $dwm).AccentColor, (Get-ItemProperty $sound).'(default)'
+          Start-Process notepad; Start-Sleep 3   # a window to show the border and title bar
           Get-Content $RJ\state\agent.log
 
       - name: Splash frames
@@ -86,7 +94,11 @@ jobs:
           "python: $py"
           if ($py) {
             $exe = $py -replace 'pythonw\.exe$', 'python.exe'
-            & $exe "$RJ\radiojoy-week.py" --force 2>&1 | Out-String
+            # warnings on stderr (Tumblr refuses GitHub's servers) aren't failures
+            $ErrorActionPreference = 'Continue'
+            git -C . show HEAD:theme/radiojoy-week.txt | Set-Content "$RJ\theme\radiojoy-week.txt" -Encoding UTF8
+            & $exe "$RJ\radiojoy-week.py" --force 2>&1 | ForEach-Object { "$_" }
+            "exit code: $LASTEXITCODE"
             Get-ChildItem $RJ\week -ErrorAction SilentlyContinue | Select-Object Name, Length | Out-String
             Copy-Item $RJ\week\*.png artifacts\ -ErrorAction SilentlyContinue
             if (Test-Path $RJ\notify.jsonl) { Get-Content $RJ\notify.jsonl }

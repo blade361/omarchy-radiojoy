@@ -364,6 +364,16 @@ def main():
         return add_artist(sys.argv[sys.argv.index("--add-artist") + 1])
     if "--update" in sys.argv:
         return update()
+    if "--locked" not in sys.argv:  # the hourly timer: skip while the button is updating
+        import fcntl
+        CACHE.mkdir(parents=True, exist_ok=True)
+        with open(CACHE / "update.lock", "w") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return None
+            sys.argv.append("--locked")
+            return main()
     today = dt.date.today()
     state = load_state()
     force = "--force" in sys.argv
@@ -410,7 +420,7 @@ def update():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return notify("\uf005 Radiojoy Week", "Already checking for new art…")
-        sys.argv = [a for a in sys.argv if a != "--update"]
+        sys.argv = [a for a in sys.argv if a != "--update"] + ["--locked"]
         if not week_days(dt.date.today()):
             return notify("\uf005 Radiojoy Week", "It isn't Radiojoy Week right now.")
         notify("\uf005 Radiojoy Week", "Checking for new art…")

@@ -1,7 +1,7 @@
+# Installs Radiojoy on a fresh Windows VM, checks it, and uninstalls it again.
+# Run it from the Actions tab (Run workflow); screenshots and logs are in the run's artifacts.
 name: Windows test
 on:
-  push:
-    branches: [windows-test]
   workflow_dispatch:
 
 jobs:
@@ -30,10 +30,10 @@ jobs:
 
       - name: Install with the one-line command
         env:
-          RADIOJOY_BRANCH: windows-test
+          RADIOJOY_BRANCH: ${{ github.ref_name }}
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
-          irm https://raw.githubusercontent.com/blade361/omarchy-radiojoy/windows-test/windows/get.ps1 | iex
+          irm "https://raw.githubusercontent.com/${env:GITHUB_REPOSITORY}/${env:RADIOJOY_BRANCH}/windows/get.ps1" | iex
 
       - name: Check the install
         run: |

@@ -5,3 +5,7 @@
 # tumblr someartist someartist
 bluesky radiojoyenjoyer.bsky.social RadioJoy Enjoyer
 tumblr termsandfeathers termsandfeathers
+bluesky normalmar.bsky.social NormalMar
+bluesky fullpounder.bsky.social fullpounder
+bluesky pastelricky.bsky.social PastelRicky
+bluesky soniaart.bsky.social SoniaArt

@@ -38,8 +38,8 @@ Radiojoy one gives you both.
   name as in the artists file) puts it in now; when they post it, the posted copy
   replaces it instead of showing twice. List the artists in
   `~/.config/omarchy/themes/radiojoy/radiojoy-week-artists.txt` (Bluesky or Tumblr
-  accounts, only ones you've checked draw by hand); RadioJoy Enjoyer and termsandfeathers
-  are listed already. With none, it shows just the prompts.
+  accounts, only ones you've checked draw by hand); the Radiojoy Week 2026 artists
+  credited under [Fan art](#fan-art) are listed already. With none, it shows just the prompts.
   When the week is over the collage stays in the wallpaper carousel as a keepsake
   ("Radiojoy Week 2026"), with all of the week's art.
 - **Next year's week:** once a day it looks for an upcoming Radiojoy Week, reading the
@@ -183,6 +183,16 @@ repost them; follow the artists and find their work at the links below.
   and [Day 2](https://www.tumblr.com/termsandfeathers/830907476634451968) sketches (in the week collage)
 - Pikagalaxy30: [Alastor x Emily](https://www.deviantart.com/pikagalaxy30/art/Alastor-x-Emily-%28Hazbin-Hotel%2C-Radiojoy%29-1267936052)
 - OctoDemon: [RadioJoy](https://www.deviantart.com/octodemon/art/RadioJoy-1381048921)
+- NormalMar ([Bluesky](https://bsky.app/profile/normalmar.bsky.social)): Radiojoy Week 2026
+  [Day 1 "Fallen Angel"](https://bsky.app/profile/normalmar.bsky.social/post/3my63liul3c2t) (in the week collage)
+- fullpounder ([Bluesky](https://bsky.app/profile/fullpounder.bsky.social)): Radiojoy Week 2026
+  [Day 1 "Fallen Emily"](https://bsky.app/profile/fullpounder.bsky.social/post/3myav3akl4k2c) (in the week collage)
+- PastelRicky ([Bluesky](https://bsky.app/profile/pastelricky.bsky.social), [Tumblr](https://pastelricky.tumblr.com)): Radiojoy Week 2026
+  [Day 1](https://bsky.app/profile/pastelricky.bsky.social/post/3my6ys6u77c2o)
+  and [Day 2 "Dove and Shadow"](https://bsky.app/profile/pastelricky.bsky.social/post/3mya27a7ads2b) (in the week collage)
+- SoniaArt ([Bluesky](https://bsky.app/profile/soniaart.bsky.social)): Radiojoy Week 2026
+  [Day 1 "Redeemed Alastor"](https://bsky.app/profile/soniaart.bsky.social/post/3my6cp2pqec2d)
+  and [Day 2 "Shadow"](https://bsky.app/profile/soniaart.bsky.social/post/3myb4sqo5hc2l) (in the week collage)
 - MadridStone: [Date Night](https://www.deviantart.com/madridstone/art/Date-Night-%28RadioJoy%29-1332050081)
 - sPitter: [Feral Alastor giving Emily a lift](https://www.deviantart.com/spitter/art/Feral-Alastor-giving-Emily-a-lift-1327810953)
 

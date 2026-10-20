@@ -403,10 +403,19 @@ def build(week, today, pieces, out, final=False):
                        font=small_f, fill=(236, 233, 247), anchor="mm")
                 x += im.width + gap
             y += rh + cap + gap
-    out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_suffix(".tmp.png")
-    bg.convert("RGB").save(tmp)
-    tmp.replace(out)
+    # Each build gets its own file and `out` becomes a symlink to it: the shell keeps
+    # the wallpaper cached by path, so a collage rewritten in place never showed up.
+    versions = out.parent / ".week"
+    versions.mkdir(parents=True, exist_ok=True)
+    name = f"{out.stem}-{dt.datetime.now():%Y%m%d%H%M%S%f}.png"
+    bg.convert("RGB").save(versions / name)
+    link = out.with_suffix(".tmp-link")
+    link.unlink(missing_ok=True)
+    link.symlink_to(Path(".week") / name)
+    link.replace(out)
+    for old in versions.glob(f"{out.stem}-*.png"):
+        if old.name != name:
+            old.unlink(missing_ok=True)
 
 
 def scramble(images):

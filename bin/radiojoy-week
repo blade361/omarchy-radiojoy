@@ -210,8 +210,16 @@ def image_hash(data):
     return sum(1 << (r * 8 + c) for r in range(8) for c in range(8) if px[r * 9 + c] > px[r * 9 + c + 1])
 
 
-def same_image(a, b):
-    return a is not None and b is not None and bin(a ^ b).count("1") <= 10
+def same_image(a, b, bits=10):
+    return a is not None and b is not None and bin(a ^ b).count("1") <= bits
+
+
+def is_banner(data):
+    """An event banner: OCR finds a list of four or more different days ("Day One:",
+    "Day 2:" ...). A drawing has at most its own "Day 3: Prayer" label. Dates are
+    often misread, so they aren't needed."""
+    days = re.findall(r"\bday\s*(one|two|three|four|five|six|seven|[1-7])\b", ocr(data), re.I)
+    return len({d.lower() for d in days}) >= 4
 
 
 def add_piece(file, artist, day):
@@ -278,28 +286,106 @@ def collect(week):
             path = year_dir / (hashlib.sha1(key.encode()).hexdigest()[:12] + ".img")
             path.write_bytes(data)
             index[key] = {"file": path.name, "artist": artist, "day": art["day"], "link": art["link"], "hash": h}
+    for k, v in index.items():  # hash and banner check, once per piece
+        if "banner" in v and v.get("hash") is not None:
+            continue
+        try:
+            data = (year_dir / v["file"]).read_bytes()
+        except OSError:
+            continue
+        if v.get("hash") is None:
+            v["hash"] = image_hash(data)
+        v["banner"] = not k.startswith("manual-") and is_banner(data)
     index_file.write_text(json.dumps(index, indent=1), encoding="utf-8")
     pieces = [dict(v, key=k, path=str(year_dir / v["file"])) for k, v in index.items()]
     return drop_shared(pieces)
 
 
 def drop_shared(pieces):
-    """An image an artist attaches to several posts (an event banner) isn't art."""
+    """Not art, or art twice: event banners (read as an announcement with dates and
+    prompts, or near-identical images in several of an artist's posts), and a
+    close-up next to the full piece in the same post (only the full one stays)."""
+    import numpy as np
     Image = pil()
-    def ahash(p):
-        try:
-            im = Image.open(p["path"]).convert("L").resize((8, 8))
-        except Exception:
-            return None
-        px = list(im.tobytes())
-        avg = sum(px) / len(px)
-        return (p["artist"], tuple(v > avg for v in px))
-    hashes = {}
     for p in pieces:
-        p["hash"] = ahash(p)
-        hashes.setdefault(p["hash"], set()).add(p["key"].rsplit("-", 1)[0])
-    return [p for p in pieces if p["hash"] is not None and len(hashes[p["hash"]]) == 1]
+        if p.get("hash") is None:
+            try:
+                p["hash"] = image_hash(Path(p["path"]).read_bytes())
+            except OSError:
+                p["hash"] = None
+    keep = [p for p in pieces if p["hash"] is not None and not p.get("banner")]
 
+    post = lambda p: p["key"].rsplit("-", 1)[0]
+    repeated = {a["key"] for a in keep for b in keep
+                if a is not b and a["artist"] == b["artist"] and post(a) != post(b)
+                and same_image(a["hash"], b["hash"], 6)}
+    keep = [p for p in keep if p["key"] not in repeated]
+
+    def colours(p):
+        im = Image.open(p["path"]).convert("RGB").resize((128, 128))
+        a = (np.asarray(im) // 32).reshape(-1, 3)
+        h = np.bincount(a[:, 0] * 64 + a[:, 1] * 8 + a[:, 2], minlength=512).astype(float)
+        return h / h.sum()
+
+    def area(p):
+        with Image.open(p["path"]) as im:
+            return im.width * im.height
+
+    closeups = set()
+    by_post = {}
+    for p in keep:
+        by_post.setdefault(post(p), []).append(p)
+    for group in by_post.values():
+        group = sorted(group, key=area)
+        for i, small in enumerate(group):
+            for big in group[i + 1:]:
+                if (np.minimum(colours(small), colours(big)).sum() >= 0.6
+                        and crop_score(small["path"], big["path"]) >= 0.6):
+                    closeups.add(small["key"])
+                    break
+    return [p for p in keep if p["key"] not in closeups]
+
+
+def crop_score(small_path, big_path):
+    """How well the small image matches some region of the big one (1 = exactly),
+    searched over position and size (30-100% of its width), coarse then fine."""
+    import numpy as np
+    Image = pil()
+    small, big = Image.open(small_path).convert("L"), Image.open(big_path).convert("L")
+    ratio = small.height / small.width
+
+    def arr(im, width):
+        return np.asarray(im.resize((width, max(1, round(im.height * width / im.width))), Image.LANCZOS),
+                          dtype=np.float32)
+
+    def ncc(a, b):
+        a, b = a - a.mean(), b - b.mean()
+        return float((a * b).sum() / ((np.sqrt((a * a).sum()) * np.sqrt((b * b).sum())) or 1))
+
+    def search(W, scales, centre=None, radius=0, step=2):
+        B, best = arr(big, W), (-1.0, 0, 0, 0)
+        for f in scales:
+            cw = int(round(W * f))
+            ch = int(round(cw * ratio))
+            if cw < 12 or ch < 12 or ch > B.shape[0] or cw > W:
+                continue
+            S = arr(small, cw)
+            if centre:
+                cx, cy = int(centre[0] * W), int(centre[1] * W)
+                xs = range(max(0, cx - radius), min(W - cw, cx + radius) + 1)
+                ys = range(max(0, cy - radius), min(B.shape[0] - ch, cy + radius) + 1)
+            else:
+                xs, ys = range(0, W - cw + 1, step), range(0, B.shape[0] - ch + 1, step)
+            for y in ys:
+                for x in xs:
+                    r = ncc(S, B[y:y + ch, x:x + cw])
+                    if r > best[0]:
+                        best = (r, f, x / W, y / W)
+        return best
+
+    r, f, x, y = search(96, np.arange(0.3, 1.001, 0.04))
+    r2 = search(320, np.arange(f - 0.04, f + 0.041, 0.008), centre=(x, y), radius=8, step=1)[0]
+    return max(r, r2)
 
 def build(week, today, pieces, out, final=False):
     from PIL import ImageDraw, ImageFilter, ImageFont

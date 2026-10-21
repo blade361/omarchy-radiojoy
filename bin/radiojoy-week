@@ -451,9 +451,10 @@ def build(week, today, pieces, out, final=False):
     link.unlink(missing_ok=True)
     link.symlink_to(Path(".week") / name)
     link.replace(out)
-    for old in versions.glob(f"{out.stem}-*.png"):
-        if old.name != name:
-            old.unlink(missing_ok=True)
+    # keep the last few: the shell may still be loading the previous one (at login it
+    # reads the old link a moment before this rebuild), and a missing file blanks it
+    for old in sorted(versions.glob(f"{out.stem}-*.png"), reverse=True)[3:]:
+        old.unlink(missing_ok=True)
 
 
 def scramble(images):

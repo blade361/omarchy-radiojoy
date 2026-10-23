@@ -171,7 +171,9 @@ def tumblr_posts(blog, num=40):
             yield (link.rstrip("/").rsplit("/", 1)[-1], body,
                    [c.text or "" for c in it.findall("category")],
                    email.utils.parsedate_to_datetime(it.findtext("pubDate")).astimezone(dt.timezone.utc),
-                   link, "tumblr_blog" in body)
+                   # RSS has no reblog fields: a reblog quotes the original in a
+                   # blockquote (and usually credits it with class tumblr_blog)
+                   link, "tumblr_blog" in body or "<blockquote" in body)
         return
     except Exception as e:
         log(f"{blog}: rss {e!r}, trying the json api")

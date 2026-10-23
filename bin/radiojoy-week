@@ -700,13 +700,15 @@ def set_wallpaper(path):
 GRACE_DAYS = 3  # late posts still join the keepsake collage this long after the week
 
 
-def notify(title, body):
+def notify(title, body, action=False):
+    """action: a direct reply to a click. Omarchy's shell shows "omarchy-action"
+    notifications even under Do Not Disturb (game mode turns DND on)."""
     if WINDOWS:  # radiojoy-agent.ps1 shows these from the tray icon
         title = title.replace("\uf005", "\u2605")  # no Nerd Font there
         with (RJ / "notify.jsonl").open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"title": title, "body": body}) + "\n")
         return
-    subprocess.run(["notify-send", "-a", "Radiojoy", title, body],
+    subprocess.run(["notify-send", "-a", "omarchy-action" if action else "Radiojoy", title, body],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -821,11 +823,11 @@ def update():
     CACHE.mkdir(parents=True, exist_ok=True)
     with open(CACHE / "update.lock", "w") as lock:
         if not try_lock(lock):
-            return notify("\uf005 Radiojoy Week", "Already checking for new art…")
+            return notify("\uf005 Radiojoy Week", "Already checking for new art…", action=True)
         sys.argv = [a for a in sys.argv if a != "--update"] + ["--locked"]
         if not week_days(dt.date.today()):
-            return notify("\uf005 Radiojoy Week", "It isn't Radiojoy Week right now.")
-        notify("\uf005 Radiojoy Week", "Checking for new art…")
+            return notify("\uf005 Radiojoy Week", "It isn't Radiojoy Week right now.", action=True)
+        notify("\uf005 Radiojoy Week", "Checking for new art…", action=True)
         res = main()
         if res is None:
             return
@@ -833,11 +835,11 @@ def update():
         if new:
             who = ", ".join(sorted({p["artist"] for p in new}))
             notify("\uf005 Collage updated",
-                   f"{len(new)} new piece{'s' * (len(new) > 1)} by {who} · {total} in all")
+                   f"{len(new)} new piece{'s' * (len(new) > 1)} by {who} · {total} in all", action=True)
         elif res["built"]:
-            notify("\uf005 Collage updated", f"New day, no new art yet · {total} pieces")
+            notify("\uf005 Collage updated", f"New day, no new art yet · {total} pieces", action=True)
         else:
-            notify("\uf005 Radiojoy Week", f"No new art yet · the collage has all {total} pieces")
+            notify("\uf005 Radiojoy Week", f"No new art yet · the collage has all {total} pieces", action=True)
 
 
 # --- discovering the next Radiojoy Week ------------------------------------

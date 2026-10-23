@@ -22,8 +22,9 @@
 #               the artist posts it, the fetched copy replaces it: no duplicate.
 # On Windows (windows/install.ps1) the same script runs from %LOCALAPPDATA%\Radiojoy,
 # started by radiojoy-agent.ps1 (the tray icon), which also shows its notifications.
-import datetime as dt, hashlib, html, json, os, re, subprocess, sys, urllib.parse, urllib.request
+import datetime as dt, email.utils, hashlib, html, json, os, re, subprocess, sys, urllib.parse, urllib.request
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 HOME = Path.home()
 WINDOWS = sys.platform == "win32"
@@ -158,43 +159,58 @@ def fetch_bluesky(handle, week):
                    "link": f"https://bsky.app/profile/{handle}/post/{p['uri'].rsplit('/', 1)[-1]}"}
 
 
-def is_reblog(p, body, blog):
-    """A Tumblr post that isn't the blog's own: the API's reblog fields, or the
-    reblog markup in the body."""
-    for k in ("reblogged-from-name", "reblogged-root-name"):
-        if p.get(k) and p[k] != blog:
-            return True
-    return "tumblr_blog" in body
+def tumblr_posts(blog, num=40):
+    """A blog's recent posts as (id, body html, tags, UTC time, link, reblog).
+    The RSS feed first: the legacy /api/read/json started answering 403 to
+    everyone in October 2026. The JSON stays as a fallback in case RSS breaks."""
+    try:
+        root = ET.fromstring(get(f"https://{blog}.tumblr.com/rss"))
+        for it in root.iter("item"):
+            link = it.findtext("link") or ""
+            body = it.findtext("description") or ""
+            yield (link.rstrip("/").rsplit("/", 1)[-1], body,
+                   [c.text or "" for c in it.findall("category")],
+                   email.utils.parsedate_to_datetime(it.findtext("pubDate")).astimezone(dt.timezone.utc),
+                   link, "tumblr_blog" in body)
+        return
+    except Exception as e:
+        log(f"{blog}: rss {e!r}, trying the json api")
+    raw = get(f"https://{blog}.tumblr.com/api/read/json?num={num}")
+    for p in json.loads(raw[raw.index("{"):raw.rindex("}") + 1]).get("posts", []):
+        body = p.get("regular-body", "") + p.get("photo-caption", "")
+        body += "".join(f'<img src="{ph["photo-url-1280"]}">' for ph in p.get("photos", []))
+        reblog = any(p.get(k) and p[k] != blog for k in ("reblogged-from-name", "reblogged-root-name"))
+        yield (str(p["id"]), body, p.get("tags", []),
+               dt.datetime.fromtimestamp(int(p["unix-timestamp"]), dt.timezone.utc),
+               p.get("url-with-slug") or p.get("url"), reblog or "tumblr_blog" in body)
+
+
+def tumblr_images(body):
+    """The largest size of every image in a post body."""
+    urls = []
+    for tag in re.findall(r"<img[^>]+>", body):
+        srcset = re.search(r'srcset="([^"]+)"', tag)
+        if srcset:
+            urls.append(max((c.strip().rsplit(" ", 1) for c in html.unescape(srcset[1]).split(",")),
+                            key=lambda c: int(c[1].rstrip("w")))[0])
+        else:
+            urls.append(html.unescape(re.search(r'src="([^"]+)"', tag)[1]))
+    return urls
 
 
 def fetch_tumblr(blog, week):
-    raw = get(f"https://{blog}.tumblr.com/api/read/json?num=40")
-    data = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
-    for p in data.get("posts", []):
-        body = p.get("regular-body", "") + p.get("photo-caption", "")
-        if is_reblog(p, body, blog):
+    for pid, body, tags, utc, link, reblog in tumblr_posts(blog):
+        if reblog:
             continue
-        tags = " ".join(t.lower() for t in p.get("tags", []))
+        tags = " ".join(t.lower() for t in tags)
         if "radiojoy week" not in tags and "radiojoyweek" not in tags:
             continue
-        posted = event_date(dt.datetime.fromtimestamp(int(p["unix-timestamp"]), dt.timezone.utc))
+        posted = event_date(utc)
         if posted < week[0][0] - dt.timedelta(days=1):
             continue
         text = html.unescape(re.sub(r"<[^>]+>", " ", body))
-        urls = []
-        for tag in re.findall(r"<img[^>]+>", body):
-            srcset = re.search(r'srcset="([^"]+)"', tag)
-            if srcset:
-                best = max((c.strip().rsplit(" ", 1) for c in html.unescape(srcset[1]).split(",")),
-                           key=lambda c: int(c[1].rstrip("w")))[0]
-            else:
-                best = re.search(r'src="([^"]+)"', tag)[1]
-            urls.append(best)
-        for ph in p.get("photos", []):
-            urls.append(ph["photo-url-1280"])
-        for k, u in enumerate(urls):
-            yield {"id": f"{p['id']}-{k}", "url": u, "day": day_of(text, posted, week),
-                   "link": p.get("url-with-slug") or p.get("url")}
+        for k, u in enumerate(tumblr_images(body)):
+            yield {"id": f"{pid}-{k}", "url": u, "day": day_of(text, posted, week), "link": link}
 
 
 def image_hash(data):
@@ -955,15 +971,11 @@ def announcements():
                     yield (p["record"].get("text", ""), [i["fullsize"] for i in imgs],
                            f"https://bsky.app/profile/{account}/post/{p['uri'].rsplit('/', 1)[-1]}", True)
             else:
-                raw = get(f"https://{account}.tumblr.com/api/read/json?num=50")
-                for p in json.loads(raw[raw.index("{"):raw.rindex("}") + 1]).get("posts", []):
-                    body = p.get("regular-body", "") + p.get("photo-caption", "")
-                    if is_reblog(p, body, account):
+                for pid, body, tags, utc, link, reblog in tumblr_posts(account, 50):
+                    if reblog:
                         continue
-                    text = html.unescape(re.sub(r"<[^>]+>", " ", body)) + " " + " ".join(p.get("tags", []))
-                    imgs = [re.search(r'src="([^"]+)"', t)[1] for t in re.findall(r"<img[^>]+>", body)]
-                    imgs += [ph["photo-url-1280"] for ph in p.get("photos", [])]
-                    yield text, imgs, p.get("url-with-slug") or p.get("url"), True
+                    text = html.unescape(re.sub(r"<[^>]+>", " ", body)) + " " + " ".join(tags)
+                    yield text, tumblr_images(body), link, True
         except Exception as e:
             log(f"{account}: {e!r}")
     try:  # DeviantArt's public search feed reaches beyond the listed artists

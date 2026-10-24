@@ -15,6 +15,8 @@
 #               During a week it also suggests Bluesky accounts posting week art
 #               that aren't listed yet: radiojoy-week --add-artist HANDLE
 #   --update    check for new art now and say what changed (the bar button)
+#   --missing   which days of the week each artist still has no art for (after the
+#               week, a notification lists them on each of the late-post days)
 #   --credits   open a page crediting every artist (the bar button's middle-click):
 #               the week collages' pieces and the fan-art wallpapers, linked to the posts
 #   --add FILE "ARTIST" DAY
@@ -741,6 +743,8 @@ def main():
         return
     if "--discover" in sys.argv:
         return discover()
+    if "--missing" in sys.argv:
+        return print_missing()
     if "--credits" in sys.argv:
         return credits()
     if "--add" in sys.argv:
@@ -777,6 +781,7 @@ def main():
             build(w, today, pieces, out, final=True)
             state[f"final-{year}"] = sig
             save_state(state)
+        warn_missing(w, pieces, today, state)
 
     week = week_days(today)
     if not week:
@@ -796,6 +801,55 @@ def main():
     save_state(state)
     set_wallpaper(out)  # a new day or new art: show it
     return {"pieces": pieces, "new": new, "built": True}
+
+
+def coverage(week, pieces):
+    """{artist: [days with no art]} for the listed artists and anyone with art."""
+    days = range(1, len(week) + 1)
+    have = {}
+    for p in pieces:
+        have.setdefault(p["artist"], set()).add(p["day"])
+    for name in artist_profiles():
+        have.setdefault(name, set())
+    return {a: [d for d in days if d not in got] for a, got in sorted(have.items(), key=lambda x: x[0].lower())}
+
+
+def warn_missing(week, pieces, today, state):
+    """Once on each late-post day after the week: who is still missing which days,
+    so the art can be found or added by hand (radiojoy-week --add)."""
+    flag = f"missing-{week[0][0].year}-{today}"
+    if state.get(flag):
+        return
+    state[flag] = True
+    save_state(state)
+    gaps = {a: m for a, m in coverage(week, pieces).items() if m}
+    if not gaps:
+        return
+    last = today >= week[-1][0] + dt.timedelta(days=GRACE_DAYS)
+    lines = [f"{a}: day{'s' * (len(m) > 1)} {', '.join(map(str, m))}" for a, m in gaps.items()]
+    notify("\uf005 Radiojoy Week: missing days" + (" (last check)" if last else ""),
+           "No art yet for:\n" + "\n".join(lines)
+           + ("" if last else "\nLate posts are still picked up for a few days.")
+           + '\nGot one? radiojoy-week --add FILE "ARTIST" DAY')
+
+
+def print_missing():
+    today = dt.date.today()
+    weeks = [w for w in all_weeks() if w[0][0] <= today]
+    if not weeks:
+        sys.exit("no Radiojoy Week has started yet")
+    week = weeks[-1]
+    year_dir = CACHE / str(week[0][0].year)
+    index_file = year_dir / "index.json"
+    index = json.loads(index_file.read_text(encoding="utf-8")) if index_file.exists() else {}
+    pieces = drop_shared([dict(v, key=k, path=str(year_dir / v["file"])) for k, v in index.items()])
+    cov = coverage(week, pieces)
+    title = f"Radiojoy Week {week[0][0].year}"
+    width = max([len(title)] + [len(a) for a in cov])
+    print(title.ljust(width + 2) + " ".join(str(d) for d in range(1, len(week) + 1)))
+    for a, m in cov.items():
+        print(a.ljust(width + 2) + " ".join("·" if d in m else "✓" for d in range(1, len(week) + 1))
+              + (f"   missing {', '.join(map(str, m))}" if m else "   all days"))
 
 
 def mark_newest(pieces):

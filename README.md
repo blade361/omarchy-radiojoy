@@ -40,6 +40,9 @@ Radiojoy one gives you both.
   `~/.config/omarchy/themes/radiojoy/radiojoy-week-artists.txt` (Bluesky or Tumblr
   accounts, only ones you've checked draw by hand); the Radiojoy Week 2026 artists
   credited under [Fan art](#fan-art) are listed already. With none, it shows just the prompts.
+  On each of the few days after the week you get a notification listing any artist
+  still missing days (`radiojoy-week --missing` shows the table any time), so you can
+  find the art or add it by hand.
   When the week is over the collage stays in the wallpaper carousel as a keepsake
   ("Radiojoy Week 2026"), with all of the week's art.
 - **Next year's week:** once a day it looks for an upcoming Radiojoy Week, reading the
